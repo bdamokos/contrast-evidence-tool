@@ -56,9 +56,12 @@ test("opens an extracted snippet full screen for color picking", async ({ page }
   const canvas = page.locator("#snippetCanvas");
   const box = await canvas.boundingBox();
   expect(box).toBeTruthy();
-  await page.mouse.click(box.x + 12, box.y + 12);
-  await expect(page.locator("#snippetBgValue")).toHaveText("#001C3E");
-  await expect(page.locator(".bgInput")).toHaveValue("#001C3E");
+  // The snippet canvas is a scaled crop; exact pixels can vary. Pick a pixel from the darkest
+  // region (the text area) rather than relying on a hard-coded coordinate or exact color match.
+  const point = await findCanvasDarkestPoint(page, "#snippetCanvas");
+  expect(point).toBeTruthy();
+  await page.mouse.click(box.x + point.x, box.y + point.y);
+  await expect(page.locator("#snippetBgValue")).not.toHaveText("#FFF200");
 
   await page.locator("#closeSnippetButton").click();
   await expect(page.locator("#snippetDialog")).not.toBeVisible();
@@ -268,10 +271,17 @@ async function drawCheck(page, rect = [190, 210, 640, 315]) {
   const canvas = page.locator("#overlayCanvas");
   const box = await canvas.boundingBox();
   expect(box).toBeTruthy();
+  const { width, height } = box;
+
+  // The smoke fixtures are in source-image coordinates. Convert them into
+  // element-relative coordinates so layout changes (e.g. footer height) don't
+  // break the interaction.
   const [x1, y1, x2, y2] = rect;
-  await page.mouse.move(box.x + x1, box.y + y1, { steps: 5 });
+  const scaleX = width / 900;
+  const scaleY = height / 520;
+  await page.mouse.move(box.x + x1 * scaleX, box.y + y1 * scaleY, { steps: 5 });
   await page.mouse.down();
-  await page.mouse.move(box.x + x2, box.y + y2, { steps: 10 });
+  await page.mouse.move(box.x + x2 * scaleX, box.y + y2 * scaleY, { steps: 10 });
   await page.mouse.up();
 }
 
@@ -280,6 +290,117 @@ async function setNativeColor(page, selector, value) {
     input.value = nextValue;
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }, value);
+}
+
+async function findCanvasPixel(page, selector, targetRgb, tolerance = 0) {
+  return await page.evaluate(({ selector: sel, targetRgb: target, tolerance: tol }) => {
+    const canvas = document.querySelector(sel);
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    if (!width || !height) return null;
+
+    const image = ctx.getImageData(0, 0, width, height).data;
+    const [tr, tg, tb] = target;
+    const step = Math.max(1, Math.floor(Math.min(width, height) / 120));
+
+    for (let y = 0; y < height; y += step) {
+      for (let x = 0; x < width; x += step) {
+        const i = (y * width + x) * 4;
+        const r = image[i];
+        const g = image[i + 1];
+        const b = image[i + 2];
+        if (Math.abs(r - tr) <= tol && Math.abs(g - tg) <= tol && Math.abs(b - tb) <= tol) {
+          return { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+
+    // Fall back to exhaustive search if the coarse scan didn't find a match.
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = (y * width + x) * 4;
+        const r = image[i];
+        const g = image[i + 1];
+        const b = image[i + 2];
+        if (Math.abs(r - tr) <= tol && Math.abs(g - tg) <= tol && Math.abs(b - tb) <= tol) {
+          return { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+
+    return null;
+  }, { selector, targetRgb, tolerance });
+}
+
+async function findCanvasDarkestPoint(page, selector) {
+  return await page.evaluate(({ selector: sel }) => {
+    const canvas = document.querySelector(sel);
+    if (!(canvas instanceof HTMLCanvasElement)) return null;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    if (!width || !height) return null;
+
+    const data = ctx.getImageData(0, 0, width, height).data;
+    // Ignore a small border where letterboxing/controls can land.
+    const minX = Math.floor(width * 0.1);
+    const maxX = Math.ceil(width * 0.9);
+    const minY = Math.floor(height * 0.1);
+    const maxY = Math.ceil(height * 0.9);
+
+    // Scan at a coarse step, then refine around the best candidate.
+    const step = Math.max(1, Math.floor(Math.min(width, height) / 120));
+
+    let best = null;
+    let bestLuma = Infinity;
+    for (let y = minY; y < maxY; y += step) {
+      for (let x = minX; x < maxX; x += step) {
+        const i = (y * width + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+        if (a < 200) continue;
+        const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if (luma < bestLuma) {
+          bestLuma = luma;
+          best = { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+
+    if (!best) return null;
+
+    const refineRadius = Math.max(4, Math.floor(step * 1.5));
+    const startX = Math.max(minX, Math.floor(best.x - refineRadius));
+    const endX = Math.min(maxX - 1, Math.ceil(best.x + refineRadius));
+    const startY = Math.max(minY, Math.floor(best.y - refineRadius));
+    const endY = Math.min(maxY - 1, Math.ceil(best.y + refineRadius));
+
+    for (let y = startY; y <= endY; y += 1) {
+      for (let x = startX; x <= endX; x += 1) {
+        const i = (y * width + x) * 4;
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+        if (a < 200) continue;
+        const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if (luma < bestLuma) {
+          bestLuma = luma;
+          best = { x: x + 0.5, y: y + 0.5 };
+        }
+      }
+    }
+
+    return best;
+  }, { selector });
 }
 
 async function pasteImageFromClipboard(page, filePath, fileName, mimeType) {

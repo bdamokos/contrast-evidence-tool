@@ -141,6 +141,34 @@ h2 {
   min-height: 0;
 }
 
+.siteFooter {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 4px 2px 2px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.siteFooter p {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.siteFooter .sourceLink {
+  color: var(--blue);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  pointer-events: auto;
+}
+
+.siteFooter .sourceLink:hover {
+  color: var(--blue-dark);
+}
+
 .sourcesPanel,
 .canvasPanel,
 .resultsPanel {
