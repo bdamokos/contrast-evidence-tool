@@ -1,5 +1,5 @@
 {
-  "name": "scratch",
+  "name": "contrast-checker",
   "version": "1.0.0",
   "description": "A static browser tool for reviewing text contrast in screenshots and design PDFs.",
   "main": "app.js",
@@ -12,7 +12,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.59.1"
