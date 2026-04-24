@@ -195,7 +195,7 @@
       overlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.08)" : "rgba(21, 87, 166, 0.06)";
       overlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      drawNumberBadge(overlayCtx, index + 1, rect, bounds);
+      drawNumberBadge(overlayCtx, index + 1, rect, bounds, source, state.displayRect);
       overlayCtx.restore();
     });
 
@@ -212,7 +212,7 @@
     }
   }
 
-  function drawNumberBadge(ctx, number, rect, bounds) {
+  function drawNumberBadge(ctx, number, rect, bounds, source, displayRect) {
     const label = String(number);
     const width = Math.max(24, label.length * 10 + 14);
     const height = 24;
@@ -231,9 +231,19 @@
     )) || positions[0];
     const bx = clamp(chosen.x, 4, Math.max(4, bounds.width - width - 4));
     const by = clamp(chosen.y, 4, Math.max(4, bounds.height - height - 4));
-    ctx.fillStyle = "#1557a6";
+
+    let fillRgb = BADGE_FILL_CANDIDATES[0];
+    let textRgb = [255, 255, 255];
+    if (source && displayRect) {
+      const sr = displayBadgeBoxToSourceRect(displayRect, bx, by, width, height);
+      const colors = badgeColorsForSourceRect(source, sr.sx, sr.sy, sr.sw, sr.sh);
+      fillRgb = colors.fill;
+      textRgb = colors.textRgb;
+    }
+
+    ctx.fillStyle = rgbToCss(fillRgb);
     ctx.fillRect(bx, by, width, height);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = rgbToCss(textRgb);
     ctx.font = "800 13px Avenir Next, Segoe UI, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -590,7 +600,7 @@
       editorOverlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.07)" : "rgba(79, 163, 255, 0.05)";
       editorOverlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       editorOverlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      drawNumberBadge(editorOverlayCtx, index + 1, rect, bounds);
+      drawNumberBadge(editorOverlayCtx, index + 1, rect, bounds, source, state.editorDisplayRect);
       editorOverlayCtx.restore();
     });
 
@@ -1026,6 +1036,83 @@
     return (high + 0.05) / (low + 0.05);
   }
 
+  /** Solid fills tried in order; first max-contrast vs local image wins a tie. */
+  const BADGE_FILL_CANDIDATES = [
+    [21, 87, 166],
+    [255, 255, 255],
+    [18, 18, 24],
+    [232, 93, 4],
+    [124, 16, 145],
+    [0, 132, 104],
+    [220, 48, 48]
+  ];
+
+  function rgbToCss(rgb) {
+    return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`;
+  }
+
+  function averageRgbUnderRect(source, sx, sy, sw, sh) {
+    const iw = source.width;
+    const ih = source.height;
+    const x0 = clamp(Math.floor(sx), 0, Math.max(0, iw - 1));
+    const y0 = clamp(Math.floor(sy), 0, Math.max(0, ih - 1));
+    const x1 = clamp(Math.ceil(sx + sw), x0 + 1, iw);
+    const y1 = clamp(Math.ceil(sy + sh), y0 + 1, ih);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    const ctx = source.canvas.getContext("2d", { willReadFrequently: true });
+    const image = ctx.getImageData(x0, y0, w, h);
+    const data = image.data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+      n += 1;
+    }
+    if (n === 0) return [128, 128, 128];
+    return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+  }
+
+  function pickBadgeFillForBackground(bgRgb) {
+    let best = BADGE_FILL_CANDIDATES[0];
+    let bestScore = contrastRatio(best, bgRgb);
+    for (let i = 1; i < BADGE_FILL_CANDIDATES.length; i += 1) {
+      const c = BADGE_FILL_CANDIDATES[i];
+      const score = contrastRatio(c, bgRgb);
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  function pickBadgeTextOnFill(fillRgb) {
+    const onWhite = contrastRatio([255, 255, 255], fillRgb);
+    const onBlack = contrastRatio([12, 12, 18], fillRgb);
+    return onWhite >= onBlack ? [255, 255, 255] : [12, 12, 18];
+  }
+
+  function badgeColorsForSourceRect(source, sx, sy, sw, sh) {
+    const bgSample = averageRgbUnderRect(source, sx, sy, sw, sh);
+    const fill = pickBadgeFillForBackground(bgSample);
+    const textRgb = pickBadgeTextOnFill(fill);
+    return { fill, textRgb };
+  }
+
+  function displayBadgeBoxToSourceRect(displayRect, bx, by, bw, bh) {
+    return {
+      sx: (bx - displayRect.x) / displayRect.scale,
+      sy: (by - displayRect.y) / displayRect.scale,
+      sw: bw / displayRect.scale,
+      sh: bh / displayRect.scale
+    };
+  }
+
   function rgbToHex(rgb) {
     return `#${rgb.map((value) => Math.round(value).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
   }
@@ -1069,23 +1156,175 @@
       ctx.fillStyle = "rgba(21, 87, 166, 0.14)";
       ctx.fillRect(check.rect.x, check.rect.y, check.rect.width, check.rect.height);
       ctx.strokeRect(check.rect.x, check.rect.y, check.rect.width, check.rect.height);
-      drawReportBadge(ctx, index + 1, check.rect.x + 8 * scale, check.rect.y + 8 * scale, scale);
+      drawReportBadge(ctx, source, index + 1, check.rect.x + 8 * scale, check.rect.y + 8 * scale, scale);
       ctx.restore();
     });
     return canvas.toDataURL("image/jpeg", 0.9);
   }
 
-  function drawReportBadge(ctx, number, x, y, scale) {
+  function drawReportBadge(ctx, source, number, x, y, scale) {
     const label = String(number);
     const width = Math.max(34 * scale, label.length * 14 * scale + 18 * scale);
     const height = 30 * scale;
-    ctx.fillStyle = "#1557a6";
+    const { fill, textRgb } = badgeColorsForSourceRect(source, x, y, width, height);
+    ctx.fillStyle = rgbToCss(fill);
     ctx.fillRect(x, y, width, height);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = rgbToCss(textRgb);
     ctx.font = `${18 * scale}px Avenir Next, Segoe UI, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(label, x + width / 2, y + height / 2);
+  }
+
+  /** Normative excerpts from WCAG 2.2 SC 1.4.3 Contrast (Minimum). https://www.w3.org/TR/WCAG22/#contrast-minimum */
+  const WCAG_143_CONTRAST_MINIMUM = {
+    specUrl: "https://www.w3.org/TR/WCAG22/#contrast-minimum",
+    normalText:
+      "The visual presentation of text and images of text has a contrast ratio of at least 4.5:1, except for the following:",
+    largeScale:
+      "Large-scale text and images of large-scale text have a contrast ratio of at least 3:1;",
+    exemptUi:
+      "Text or images of text that are part of an inactive user interface component, that are pure decoration, that are not visible to anyone, or that are part of a picture that contains significant other visual content, have no contrast requirement.",
+    exemptLogo: "Text that is part of a logo or brand name has no contrast requirement."
+  };
+
+  /** Normative excerpts from WCAG 2.2 SC 1.4.6 Contrast (Enhanced). https://www.w3.org/TR/WCAG22/#contrast-enhanced */
+  const WCAG_146_CONTRAST_ENHANCED = {
+    specUrl: "https://www.w3.org/TR/WCAG22/#contrast-enhanced",
+    normalText:
+      "The visual presentation of text and images of text has a contrast ratio of at least 7:1, except for the following:",
+    largeScale:
+      "Large-scale text and images of large-scale text have a contrast ratio of at least 4.5:1;"
+  };
+
+  /** @returns {number} y after table */
+  function drawWcagContrastPassCriteriaTable(doc, page, yStart) {
+    const left = page.margin;
+    const tableW = page.width - page.margin * 2;
+    const colLabelW = 30;
+    const colTextW = tableW - colLabelW;
+    const xText = left + colLabelW + 2;
+    const pad = 2;
+    const lineH = 3.2;
+    const fontBody = 6.5;
+    const fontHead = 7;
+
+    const exemptCombined = `${WCAG_143_CONTRAST_MINIMUM.exemptUi} ${WCAG_143_CONTRAST_MINIMUM.exemptLogo}`;
+    const blocks = [
+      {
+        banner: "Success Criterion 1.4.3 Contrast (Minimum) (Level AA)",
+        specUrl: WCAG_143_CONTRAST_MINIMUM.specUrl,
+        rows: [
+          { label: "Text / images of text", text: WCAG_143_CONTRAST_MINIMUM.normalText },
+          { label: "Large-scale text", text: WCAG_143_CONTRAST_MINIMUM.largeScale },
+          { label: "No requirement", text: exemptCombined }
+        ]
+      },
+      {
+        banner: "Success Criterion 1.4.6 Contrast (Enhanced) (Level AAA)",
+        specUrl: WCAG_146_CONTRAST_ENHANCED.specUrl,
+        rows: [
+          { label: "Text / images of text", text: WCAG_146_CONTRAST_ENHANCED.normalText },
+          { label: "Large-scale text", text: WCAG_146_CONTRAST_ENHANCED.largeScale },
+          { label: "No requirement", text: exemptCombined }
+        ]
+      }
+    ];
+
+    let y = yStart;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("Pass criteria — WCAG 2.2 text contrast", left, y);
+    y += 4.5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(21, 87, 166);
+    doc.textWithLink("§1.4.3 — w3.org/TR/WCAG22/#contrast-minimum", left, y, {
+      url: WCAG_143_CONTRAST_MINIMUM.specUrl
+    });
+    y += 3.5;
+    doc.textWithLink("§1.4.6 — w3.org/TR/WCAG22/#contrast-enhanced", left, y, {
+      url: WCAG_146_CONTRAST_ENHANCED.specUrl
+    });
+    doc.setTextColor(0, 0, 0);
+    y += 5;
+
+    doc.setDrawColor(180, 172, 160);
+    doc.setLineWidth(0.15);
+
+    const headerH = 6;
+    doc.setFillColor(21, 87, 166);
+    doc.rect(left, y, tableW, headerH, "F");
+    doc.rect(left, y, tableW, headerH);
+    doc.line(left + colLabelW, y, left + colLabelW, y + headerH);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text("Case", left + pad, y + 4.2);
+    doc.text("Requirement (normative)", xText, y + 4.2);
+    doc.setTextColor(0, 0, 0);
+    y += headerH;
+
+    for (const block of blocks) {
+      const bannerLines = doc.splitTextToSize(block.banner, tableW - pad * 2);
+      const linkShow = block.specUrl.replace(/^https:\/\//, "");
+      const bannerH = Math.max(8.5, bannerLines.length * lineH + lineH + pad * 2 + 1.2);
+
+      doc.setFillColor(232, 238, 248);
+      doc.rect(left, y, tableW, bannerH, "F");
+      doc.rect(left, y, tableW, bannerH);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.8);
+      doc.setTextColor(15, 55, 100);
+      let by = y + pad + lineH * 0.85;
+      for (const line of bannerLines) {
+        doc.text(line, left + pad, by);
+        by += lineH;
+      }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.2);
+      doc.setTextColor(21, 87, 166);
+      doc.textWithLink(linkShow, left + pad, by, { url: block.specUrl });
+      doc.setTextColor(0, 0, 0);
+      y += bannerH;
+
+      for (const row of block.rows) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(fontHead);
+        const labelLines = doc.splitTextToSize(row.label, colLabelW - pad);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(fontBody);
+        const textLines = doc.splitTextToSize(row.text, colTextW - pad * 2);
+        const rowH = Math.max(
+          labelLines.length * lineH,
+          textLines.length * lineH,
+          lineH + pad * 2
+        );
+
+        doc.rect(left, y, tableW, rowH);
+        doc.line(left + colLabelW, y, left + colLabelW, y + rowH);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(fontHead);
+        let ly = y + pad + lineH * 0.85;
+        for (const line of labelLines) {
+          doc.text(line, left + pad, ly);
+          ly += lineH;
+        }
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(fontBody);
+        let ty = y + pad + lineH * 0.85;
+        for (const line of textLines) {
+          doc.text(line, xText, ty);
+          ty += lineH;
+        }
+
+        y += rowH;
+      }
+    }
+
+    return y + 2;
   }
 
   async function exportReport() {
@@ -1117,7 +1356,9 @@
     doc.setTextColor(21, 87, 166);
     doc.textWithLink(toolPagesUrl, page.margin, y, { url: toolPagesUrl });
     doc.setTextColor(0, 0, 0);
-    y += 10;
+    y += 8;
+    y = drawWcagContrastPassCriteriaTable(doc, page, y);
+    y += 6;
 
     let exportSectionNumber = 0;
     for (const [sourceIndex, source] of state.sources.entries()) {
