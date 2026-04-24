@@ -151,7 +151,7 @@ h2 {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .siteFooter p {
