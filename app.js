@@ -205,6 +205,7 @@
       const crop = node.querySelector(".cropPreview");
       crop.src = check.cropDataUrl;
       crop.alt = `${check.label} crop`;
+      wireCropPicker(node, source, check, crop);
 
       wireHexInput(node, check, "fg");
       wireHexInput(node, check, "bg");
@@ -228,9 +229,11 @@
 
   function wireHexInput(node, check, kind) {
     const input = node.querySelector(kind === "fg" ? ".fgInput" : ".bgInput");
+    const colorInput = node.querySelector(kind === "fg" ? ".fgColorInput" : ".bgColorInput");
     const swatch = node.querySelector(kind === "fg" ? ".fgSwatch" : ".bgSwatch");
     const key = kind === "fg" ? "foreground" : "background";
     input.value = rgbToHex(check[key]);
+    colorInput.value = rgbToHex(check[key]);
     swatch.style.background = rgbToHex(check[key]);
     input.addEventListener("change", () => {
       const parsed = parseHex(input.value);
@@ -239,6 +242,37 @@
         return;
       }
       check[key] = parsed;
+      check.ratio = contrastRatio(check.foreground, check.background);
+      render();
+    });
+    colorInput.addEventListener("input", () => {
+      const parsed = parseHex(colorInput.value);
+      if (!parsed) return;
+      check[key] = parsed;
+      check.ratio = contrastRatio(check.foreground, check.background);
+      render();
+    });
+  }
+
+  function wireCropPicker(node, source, check, crop) {
+    const fgButton = node.querySelector(".pickFg");
+    const bgButton = node.querySelector(".pickBg");
+    const setMode = (mode) => {
+      check.pickTarget = mode;
+      fgButton.classList.toggle("isActive", mode === "foreground");
+      bgButton.classList.toggle("isActive", mode === "background");
+    };
+    setMode(check.pickTarget || "foreground");
+    fgButton.addEventListener("click", () => setMode("foreground"));
+    bgButton.addEventListener("click", () => setMode("background"));
+    crop.addEventListener("click", (event) => {
+      const rect = crop.getBoundingClientRect();
+      const xRatio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+      const yRatio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+      const x = clamp(Math.floor(check.rect.x + xRatio * check.rect.width), 0, source.width - 1);
+      const y = clamp(Math.floor(check.rect.y + yRatio * check.rect.height), 0, source.height - 1);
+      const pixel = source.canvas.getContext("2d", { willReadFrequently: true }).getImageData(x, y, 1, 1).data;
+      check[check.pickTarget || "foreground"] = [pixel[0], pixel[1], pixel[2]];
       check.ratio = contrastRatio(check.foreground, check.background);
       render();
     });
@@ -455,7 +489,8 @@
       cropDataUrl,
       foreground: sample.foreground,
       background: sample.background,
-      ratio: contrastRatio(sample.foreground, sample.background)
+      ratio: contrastRatio(sample.foreground, sample.background),
+      pickTarget: "foreground"
     };
   }
 

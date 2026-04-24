@@ -100,6 +100,10 @@
           <input class="labelInput" type="text">
         </label>
         <div class="cropWrap">
+          <div class="pickMode" role="group" aria-label="Pick color from crop">
+            <button class="pickButton pickFg isActive" type="button">Pick foreground</button>
+            <button class="pickButton pickBg" type="button">Pick background</button>
+          </div>
           <img class="cropPreview" alt="">
         </div>
         <dl class="metrics">
@@ -107,6 +111,7 @@
             <dt>Foreground</dt>
             <dd>
               <span class="swatch fgSwatch"></span>
+              <input class="nativeColor fgColorInput" type="color" aria-label="Foreground color picker">
               <input class="hexInput fgInput" type="text" maxlength="7" spellcheck="false">
             </dd>
           </div>
@@ -114,6 +119,7 @@
             <dt>Background</dt>
             <dd>
               <span class="swatch bgSwatch"></span>
+              <input class="nativeColor bgColorInput" type="color" aria-label="Background color picker">
               <input class="hexInput bgInput" type="text" maxlength="7" spellcheck="false">
             </dd>
           </div>
