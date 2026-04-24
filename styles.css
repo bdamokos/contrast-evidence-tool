@@ -316,7 +316,8 @@ canvas {
 }
 
 #imageCanvas,
-#overlayCanvas {
+#overlayCanvas,
+.deleteHandleLayer {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -325,6 +326,43 @@ canvas {
 
 #overlayCanvas {
   cursor: crosshair;
+}
+
+.deleteHandleLayer {
+  pointer-events: none;
+  z-index: 3;
+}
+
+.rectangleDeleteHandle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--red);
+  background: #fff;
+  color: var(--red);
+  cursor: pointer;
+  pointer-events: auto;
+  font-size: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.rectangleDeleteHandle::before,
+.rectangleDeleteHandle::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 8px;
+  height: 2px;
+  background: currentColor;
+}
+
+.rectangleDeleteHandle::before {
+  transform: rotate(45deg);
+}
+
+.rectangleDeleteHandle::after {
+  transform: rotate(-45deg);
 }
 
 .emptyState {

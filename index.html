@@ -40,6 +40,7 @@
             </div>
             <div class="toolbarActions">
               <button id="detectTextButton" class="iconButton" type="button" disabled>Detect text blocks</button>
+              <button id="removeDetectedButton" class="iconButton" type="button" hidden>Remove detected blocks</button>
               <button id="openEditorButton" class="iconButton primary" type="button" disabled>Open full screen</button>
               <button id="deleteSourceButton" class="iconButton" type="button" title="Delete active source" disabled>Delete</button>
             </div>
@@ -51,6 +52,7 @@
             </div>
             <canvas id="imageCanvas"></canvas>
             <canvas id="overlayCanvas" aria-label="Selection overlay"></canvas>
+            <div id="overlayDeleteLayer" class="deleteHandleLayer" aria-hidden="false"></div>
             <div
               id="pdfPreparingOverlay"
               class="pdfPreparingOverlay"
@@ -126,6 +128,7 @@
           <div id="editorCanvasWrap" class="editorCanvasWrap">
             <canvas id="editorImageCanvas"></canvas>
             <canvas id="editorOverlayCanvas" aria-label="Full-screen selection overlay"></canvas>
+            <div id="editorDeleteLayer" class="deleteHandleLayer" aria-hidden="false"></div>
           </div>
         </div>
       </div>

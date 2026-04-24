@@ -51,6 +51,7 @@
     exportButton: document.querySelector("#exportButton"),
     resetButton: document.querySelector("#resetButton"),
     detectTextButton: document.querySelector("#detectTextButton"),
+    removeDetectedButton: document.querySelector("#removeDetectedButton"),
     openEditorButton: document.querySelector("#openEditorButton"),
     deleteSourceButton: document.querySelector("#deleteSourceButton"),
     sourceCount: document.querySelector("#sourceCount"),
@@ -62,6 +63,7 @@
     pdfPreparingStatusText: document.querySelector("#pdfPreparingStatusText"),
     imageCanvas: document.querySelector("#imageCanvas"),
     overlayCanvas: document.querySelector("#overlayCanvas"),
+    overlayDeleteLayer: document.querySelector("#overlayDeleteLayer"),
     status: document.querySelector("#status"),
     results: document.querySelector("#results"),
     sourceTemplate: document.querySelector("#sourceTemplate"),
@@ -79,6 +81,7 @@
     editorCanvasWrap: document.querySelector("#editorCanvasWrap"),
     editorImageCanvas: document.querySelector("#editorImageCanvas"),
     editorOverlayCanvas: document.querySelector("#editorOverlayCanvas"),
+    editorDeleteLayer: document.querySelector("#editorDeleteLayer"),
     zoomOutButton: document.querySelector("#zoomOutButton"),
     zoomInButton: document.querySelector("#zoomInButton"),
     zoomFitButton: document.querySelector("#zoomFitButton"),
@@ -185,13 +188,17 @@
       state.displayRect.height
     );
     drawOverlay();
+    renderDeleteHandles("main");
   }
 
   function drawOverlay() {
     const source = activeSource();
     const bounds = els.dropZone.getBoundingClientRect();
     overlayCtx.clearRect(0, 0, bounds.width, bounds.height);
-    if (!source || !state.displayRect) return;
+    if (!source || !state.displayRect) {
+      renderDeleteHandles("main");
+      return;
+    }
 
     source.checks.forEach((check, index) => {
       const rect = sourceToDisplayRect(check.rect);
@@ -227,6 +234,59 @@
   }
 
   const BADGE_GAP_SCREEN = 6;
+  const DELETE_HANDLE_SIZE = 20;
+
+  function deleteHandleRect(displayRect, bounds) {
+    const size = DELETE_HANDLE_SIZE;
+    return {
+      x: clamp(displayRect.x + displayRect.width - size / 2, 4, Math.max(4, bounds.width - size - 4)),
+      y: clamp(displayRect.y - size / 2, 4, Math.max(4, bounds.height - size - 4)),
+      width: size,
+      height: size
+    };
+  }
+
+  function renderDeleteHandles(target = "main") {
+    const source = activeSource();
+    const displayRect = target === "editor" ? state.editorDisplayRect : state.displayRect;
+    const layer = target === "editor" ? els.editorDeleteLayer : els.overlayDeleteLayer;
+    if (!layer) return;
+    layer.replaceChildren();
+    if (!source || !displayRect) return;
+    const bounds = target === "editor"
+      ? { width: displayRect.width, height: displayRect.height }
+      : els.dropZone.getBoundingClientRect();
+
+    source.checks.forEach((check, index) => {
+      const rect = sourceRectToDisplay(check.rect, displayRect);
+      const box = deleteHandleRect(rect, bounds);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "rectangleDeleteHandle";
+      button.setAttribute("aria-label", `Remove rectangle ${index + 1}`);
+      button.style.left = `${box.x}px`;
+      button.style.top = `${box.y}px`;
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        removeCheck(source, check.id);
+      });
+      layer.append(button);
+    });
+  }
+
+  function removeCheck(source, checkId) {
+    source.checks = source.checks.filter((check) => check.id !== checkId);
+    state.activeCheckId = source.checks[0]?.id || null;
+    state.dragStart = null;
+    state.draftRect = null;
+    render();
+    if (els.editorDialog.open) renderEditor();
+  }
 
   /**
    * Same badge anchor everywhere (main overlay, editor, PDF export): try above → right → below →
@@ -466,29 +526,41 @@
   function updateButtons() {
     const hasSources = state.sources.length > 0;
     const hasChecks = state.sources.some((source) => source.checks.length > 0);
+    const source = activeSource();
+    const hasAutoDetectedChecks = Boolean(source?.checks.some((check) => check.autoDetected));
     els.exportButton.disabled = !hasChecks;
     els.resetButton.disabled = !hasSources;
-    els.detectTextButton.disabled = !activeSource();
-    els.openEditorButton.disabled = !activeSource();
-    els.deleteSourceButton.disabled = !activeSource();
+    els.detectTextButton.disabled = !source;
+    if (els.removeDetectedButton) {
+      els.removeDetectedButton.hidden = !hasAutoDetectedChecks;
+      els.removeDetectedButton.disabled = !hasAutoDetectedChecks;
+    }
+    els.openEditorButton.disabled = !source;
+    els.deleteSourceButton.disabled = !source;
   }
 
   function displayPointToSource(event, target = "main") {
     const displayRect = target === "editor" ? state.editorDisplayRect : state.displayRect;
-    const canvas = target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas;
+    const point = displayCanvasPoint(event, target);
     if (!displayRect) return null;
-    const canvasRect = canvas.getBoundingClientRect();
-    const x = event.clientX - canvasRect.left;
-    const y = event.clientY - canvasRect.top;
     const within =
-      x >= displayRect.x &&
-      y >= displayRect.y &&
-      x <= displayRect.x + displayRect.width &&
-      y <= displayRect.y + displayRect.height;
+      point.x >= displayRect.x &&
+      point.y >= displayRect.y &&
+      point.x <= displayRect.x + displayRect.width &&
+      point.y <= displayRect.y + displayRect.height;
     if (!within) return null;
     return {
-      x: (x - displayRect.x) / displayRect.scale,
-      y: (y - displayRect.y) / displayRect.scale
+      x: (point.x - displayRect.x) / displayRect.scale,
+      y: (point.y - displayRect.y) / displayRect.scale
+    };
+  }
+
+  function displayCanvasPoint(event, target = "main") {
+    const canvas = target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas;
+    const canvasRect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - canvasRect.left,
+      y: event.clientY - canvasRect.top
     };
   }
 
@@ -518,27 +590,11 @@
     };
   }
 
-  function findCheckAtPoint(source, point) {
-    return [...source.checks].reverse().find((check) => (
-      point.x >= check.rect.x &&
-      point.y >= check.rect.y &&
-      point.x <= check.rect.x + check.rect.width &&
-      point.y <= check.rect.y + check.rect.height
-    ));
-  }
-
   function onPointerDown(event, target = "main") {
     const source = activeSource();
     if (!source) return;
     const point = displayPointToSource(event, target);
     if (!point) return;
-
-    const hit = findCheckAtPoint(source, point);
-    if (hit) {
-      state.activeCheckId = hit.id;
-      render();
-      return;
-    }
 
     state.dragStart = point;
     state.draftRect = normalizeRect(point, point, source);
@@ -646,6 +702,7 @@
     editorImageCtx.drawImage(source.canvas, 0, 0, width, height);
     state.editorDisplayRect = { x: 0, y: 0, width, height, scale };
     drawEditorOverlay();
+    renderDeleteHandles("editor");
   }
 
   function drawEditorOverlay() {
@@ -1130,6 +1187,7 @@
 
   async function buildPdfPageAnalysis(page, viewport, canvas, pageNumber) {
     const textItems = await extractPdfTextItems(page, viewport);
+    await inferPdfTextColors(page, textItems);
     const blocks = detectTextBlocks(textItems);
     sampleBlockBackgrounds(canvas, blocks);
     return {
@@ -1171,13 +1229,153 @@
       fontName: item.fontName,
       fontSize: height,
       direction: item.dir || "ltr",
-      foreground: {
+      foreground: null,
+      confidence: 0.7
+    };
+  }
+
+  async function inferPdfTextColors(page, textItems) {
+    if (!textItems.length) return;
+    const operatorList = await page.getOperatorList();
+    const ops = window.pdfjsLib.OPS || {};
+    const fnArray = operatorList.fnArray || [];
+    const argsArray = operatorList.argsArray || [];
+    let currentFill = [0, 0, 0];
+    let textIndex = 0;
+
+    for (let i = 0; i < fnArray.length && textIndex < textItems.length; i += 1) {
+      const fn = fnArray[i];
+      const args = argsArray[i] || [];
+      const fill = fillColorFromPdfOperator(fn, args, ops);
+      if (fill) {
+        currentFill = fill;
+        continue;
+      }
+
+      const paintedCount = pdfTextPaintItemCount(fn, args, ops);
+      if (paintedCount <= 0) continue;
+      for (let n = 0; n < paintedCount && textIndex < textItems.length; n += 1) {
+        textItems[textIndex].foreground = {
+          rgb: currentFill,
+          source: "pdf-operator",
+          confidence: 0.82
+        };
+        textItems[textIndex].confidence = Math.max(textItems[textIndex].confidence, 0.82);
+        textIndex += 1;
+      }
+    }
+
+    for (; textIndex < textItems.length; textIndex += 1) {
+      textItems[textIndex].foreground = {
         rgb: [0, 0, 0],
         source: "text-layer-inferred",
-        confidence: 0.55
-      },
-      confidence: 0.72
+        confidence: 0.45
+      };
+    }
+  }
+
+  function fillColorFromPdfOperator(fn, args, ops) {
+    if (fn === ops.setFillRGBColor) {
+      return normalizePdfColor(args.slice(0, 3));
+    }
+    if (fn === ops.setFillGray) {
+      const gray = normalizePdfColorComponent(args[0]);
+      return [gray, gray, gray];
+    }
+    if (fn === ops.setFillCMYKColor) {
+      return cmykToRgb(args[0], args[1], args[2], args[3]);
+    }
+    return null;
+  }
+
+  function pdfTextPaintItemCount(fn, args, ops) {
+    if (
+      fn === ops.showText ||
+      fn === ops.showSpacedText ||
+      fn === ops.nextLineShowText ||
+      fn === ops.nextLineSetSpacingShowText
+    ) {
+      return 1;
+    }
+    if (fn === ops.showType3Text && Array.isArray(args[0])) {
+      return args[0].filter((item) => typeof item !== "number").length || 1;
+    }
+    return 0;
+  }
+
+  function normalizePdfColor(values) {
+    const flattened = flattenPdfColorArgs(values);
+    const parsedString = flattened.map(parsePdfColorString).find(Boolean);
+    if (parsedString) return parsedString;
+    if (flattened.length === 1) {
+      const single = Number(flattened[0]);
+      if (Number.isFinite(single) && single > 1 && single <= 0xffffff) {
+        return [
+          (single >> 16) & 255,
+          (single >> 8) & 255,
+          single & 255
+        ];
+      }
+    }
+    const components = flattened.slice(0, 3).map(normalizePdfColorComponent);
+    while (components.length < 3) components.push(components[0] ?? 0);
+    return components;
+  }
+
+  function parsePdfColorString(value) {
+    if (typeof value !== "string") return null;
+    const hex = value.trim().match(/^#?([0-9a-f]{6})$/i);
+    if (hex) {
+      return [
+        parseInt(hex[1].slice(0, 2), 16),
+        parseInt(hex[1].slice(2, 4), 16),
+        parseInt(hex[1].slice(4, 6), 16)
+      ];
+    }
+    const rgb = value.match(/rgba?\(([^)]+)\)/i);
+    if (rgb) {
+      const parts = rgb[1].split(",").slice(0, 3).map((part) => normalizePdfColorComponent(part.trim()));
+      while (parts.length < 3) parts.push(parts[0] ?? 0);
+      return parts;
+    }
+    return null;
+  }
+
+  function normalizePdfColorComponent(value) {
+    if (Array.isArray(value)) return normalizePdfColorComponent(value[0]);
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return clamp(Math.round((n <= 1 ? n * 255 : n)), 0, 255);
+  }
+
+  function cmykToRgb(c, m, y, k) {
+    const values = flattenPdfColorArgs([c, m, y, k]);
+    c = values[0];
+    m = values[1];
+    y = values[2];
+    k = values[3];
+    const cn = clamp(Number(c) || 0, 0, 1);
+    const mn = clamp(Number(m) || 0, 0, 1);
+    const yn = clamp(Number(y) || 0, 0, 1);
+    const kn = clamp(Number(k) || 0, 0, 1);
+    return [
+      Math.round(255 * (1 - cn) * (1 - kn)),
+      Math.round(255 * (1 - mn) * (1 - kn)),
+      Math.round(255 * (1 - yn) * (1 - kn))
+    ];
+  }
+
+  function flattenPdfColorArgs(values) {
+    const out = [];
+    const visit = (value) => {
+      if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+        for (const item of value) visit(item);
+      } else {
+        out.push(value);
+      }
     };
+    visit(values);
+    return out;
   }
 
   function detectTextBlocks(items) {
@@ -2350,12 +2548,23 @@
         width: clamp(Math.round(block.rect.width), 1, source.width),
         height: clamp(Math.round(block.rect.height), 1, source.height)
       };
-      source.checks.push(createCheck(source, rect));
+      const check = createCheck(source, rect);
+      check.autoDetected = true;
+      source.checks.push(check);
     }
 
     if (candidates.length) {
       state.activeCheckId = source.checks[source.checks.length - candidates.length]?.id || source.checks[0]?.id || null;
     }
+    render();
+    if (els.editorDialog.open) renderEditor();
+  }
+
+  function removeAutoDetectedChecksForActiveSource() {
+    const source = activeSource();
+    if (!source) return;
+    source.checks = source.checks.filter((check) => !check.autoDetected);
+    state.activeCheckId = source.checks[0]?.id || null;
     render();
     if (els.editorDialog.open) renderEditor();
   }
@@ -2428,6 +2637,7 @@
 
   els.importPdfPagesButton.addEventListener("click", importPendingPdfPages);
   els.detectTextButton.addEventListener("click", detectTextBlocksForActiveSource);
+  els.removeDetectedButton?.addEventListener("click", removeAutoDetectedChecksForActiveSource);
   els.exportButton.addEventListener("click", exportReport);
   els.resetButton.addEventListener("click", () => {
     state.sources = [];

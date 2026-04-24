@@ -98,6 +98,33 @@ test("hex manual input accepts 3-digit shorthand", async ({ page }) => {
   await expect(page.locator(".fgInput")).toHaveValue("#FF00AA");
 });
 
+test("can start a new rectangle inside an existing rectangle", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page, [150, 160, 650, 340]);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+
+  await drawCheck(page, [250, 220, 520, 290]);
+  await expect(page.locator(".sampleCard")).toHaveCount(2);
+});
+
+test("removes rectangles from their overlay delete buttons", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page, [150, 160, 650, 340]);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+
+  await page.locator(".rectangleDeleteHandle").first().click();
+  await expect(page.locator(".sampleCard")).toHaveCount(0);
+
+  await drawCheck(page, [250, 220, 520, 290]);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+});
+
 test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(solidPngPath);
@@ -158,11 +185,18 @@ test("detects PDF-native text blocks and tags generated checks", async ({ page }
   await expect(page.locator("#activeSourceMeta")).toContainText("text blocks");
 
   await page.locator("#detectTextButton").click();
-  await expect(page.locator(".sampleCard")).toHaveCount(2);
+  await expect(page.locator(".sampleCard")).toHaveCount(4);
   await expect(page.locator(".methodBadge").first()).toContainText("PDF-native");
+  await expect.poll(async () => (
+    page.locator(".fgInput").evaluateAll((inputs) => inputs.map((input) => input.value))
+  )).toEqual(["#000000", "#FFFFFF", "#000000", "#000000"]);
+  await expect(page.locator("#removeDetectedButton")).toBeVisible();
 
   await page.locator("#detectTextButton").click();
-  await expect(page.locator(".sampleCard")).toHaveCount(2);
+  await expect(page.locator(".sampleCard")).toHaveCount(4);
+
+  await page.locator("#removeDetectedButton").click();
+  await expect(page.locator(".sampleCard")).toHaveCount(0);
 });
 
 async function drawCheck(page, rect = [190, 210, 640, 315]) {
@@ -290,12 +324,14 @@ function crc32(buffer) {
 function makePdfFixture() {
   const text = [
     "BT /F1 26 Tf 0 0 0 rg 100 388 Td (Black text on white) Tj ET",
+    "BT /F1 22 Tf 1 1 1 rg 660 390 Td (White text) Tj ET",
     "BT /F1 26 Tf 0 0 0 rg 100 328 Td (More dark text) Tj ET",
     "BT /F1 22 Tf 0 0 0 rg 112 162 Td (Dark text on yellow) Tj ET"
   ].join("\n");
   const stream = [
     "q 0.082 0.341 0.651 rg 0 0 900 520 re f Q",
     "q 1 1 1 rg 90 375 490 35 re f 90 315 410 35 re f 90 255 540 35 re f Q",
+    "q 0.78 0.08 0.05 rg 650 375 190 35 re f Q",
     "q 1 0.949 0 rg 70 80 650 125 re f Q",
     "q 0 0.110 0.243 rg 100 155 510 25 re f 100 110 470 25 re f Q",
     text
