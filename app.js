@@ -21,6 +21,24 @@
     pendingPdf: null
   };
 
+  const BADGE_DETAILS = {
+    aaNormal: {
+      label: "AA normal",
+      requirement: 4.5,
+      description: "Level AA for normal-size body text. This is the standard baseline for readable text contrast."
+    },
+    aaLarge: {
+      label: "AA large",
+      requirement: 3,
+      description: "Level AA for large text, typically 18pt regular or 14pt bold and up."
+    },
+    aaaNormal: {
+      label: "AAA normal",
+      requirement: 7,
+      description: "Level AAA for normal-size text. This is a stricter enhanced contrast target."
+    }
+  };
+
   const els = {
     fileInput: document.querySelector("#fileInput"),
     exportButton: document.querySelector("#exportButton"),
@@ -241,9 +259,9 @@
 
       wireHexInput(node, check, "fg");
       wireHexInput(node, check, "bg");
-      setBadge(node.querySelector(".aaNormal"), "AA normal", check.ratio >= 4.5);
-      setBadge(node.querySelector(".aaLarge"), "AA large", check.ratio >= 3);
-      setBadge(node.querySelector(".aaaNormal"), "AAA normal", check.ratio >= 7);
+      setBadge(node.querySelector(".aaNormal"), BADGE_DETAILS.aaNormal, check.ratio >= BADGE_DETAILS.aaNormal.requirement);
+      setBadge(node.querySelector(".aaLarge"), BADGE_DETAILS.aaLarge, check.ratio >= BADGE_DETAILS.aaLarge.requirement);
+      setBadge(node.querySelector(".aaaNormal"), BADGE_DETAILS.aaaNormal, check.ratio >= BADGE_DETAILS.aaaNormal.requirement);
 
       node.querySelector(".sampleFocus").addEventListener("click", () => {
         state.activeCheckId = check.id;
@@ -310,8 +328,12 @@
     });
   }
 
-  function setBadge(el, text, pass) {
-    el.textContent = `${text}: ${pass ? "pass" : "fail"}`;
+  function setBadge(el, details, pass) {
+    el.querySelector(".badgeLabel").textContent = `${details.label}: ${pass ? "pass" : "fail"}`;
+    const info = el.querySelector(".badgeInfo");
+    const message = `${details.label} requires at least ${details.requirement}:1 contrast. ${details.description}`;
+    info.title = message;
+    info.setAttribute("aria-label", message);
     el.classList.toggle("pass", pass);
     el.classList.toggle("fail", !pass);
   }
