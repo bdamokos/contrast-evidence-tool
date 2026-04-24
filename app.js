@@ -825,7 +825,7 @@
       for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
         done += 1;
         await setPdfImportStatus(
-          `Working in the background — rendering page ${pageNumber} (${done} of ${totalSelected}). The dialog may look idle; import is still running.`
+          `Working in the background — rendering page ${pageNumber} (${done} of ${totalSelected}).`
         );
         const page = await pdf.getPage(pageNumber);
         const viewport = page.getViewport({ scale: 2 });
