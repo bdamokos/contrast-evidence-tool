@@ -41,6 +41,7 @@ input:focus-visible {
 }
 
 .shell {
+  position: relative;
   width: 100vw;
   height: 100vh;
   margin: 0 auto;
@@ -139,6 +140,36 @@ h2 {
   align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.siteFooter {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+.siteFooter p {
+  margin: 0;
+  max-width: 52ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.siteFooter .sourceLink {
+  color: var(--blue);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.siteFooter .sourceLink:hover {
+  color: var(--blue-dark);
 }
 
 .sourcesPanel,
