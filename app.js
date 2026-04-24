@@ -323,12 +323,15 @@
       node.querySelector(".ratio").textContent = `${formatRatio(check.ratio)}:1`;
       const methodBadge = node.querySelector(".methodBadge");
       const mismatchBadge = node.querySelector(".mismatchBadge");
+      const detectionError = node.querySelector(".detectionError");
       methodBadge.textContent = sampleMethodLabel(check);
       methodBadge.hidden = !debugSampling;
       mismatchBadge.textContent = check.ocrRasterMismatch
         ? "OCR colors differ from raster sample"
         : "";
       mismatchBadge.hidden = !check.ocrRasterMismatch;
+      detectionError.textContent = check.detectionError || "";
+      detectionError.hidden = !check.detectionError;
 
       const labelInput = node.querySelector(".labelInput");
       labelInput.value = check.label;
@@ -380,6 +383,7 @@
       }
       check[key] = parsed;
       check.ratio = contrastRatio(check.foreground, check.background);
+      check.detectionError = null;
       render();
     });
     colorInput.addEventListener("input", () => {
@@ -387,9 +391,11 @@
       if (!parsed) return;
       check[key] = parsed;
       check.ratio = contrastRatio(check.foreground, check.background);
+      check.detectionError = null;
       updateCheckColorControls(node, check);
       updateCheckBadges(node, check);
       updateResultSummary(node, check);
+      updateDetectionError(node, check);
       if (els.snippetDialog.open && state.snippetCheckId === check.id) renderSnippet();
       drawOverlay();
       if (els.editorDialog.open) drawEditorOverlay();
@@ -416,6 +422,12 @@
     node.querySelector(".ratio").textContent = `${formatRatio(check.ratio)}:1`;
   }
 
+  function updateDetectionError(node, check) {
+    const detectionError = node.querySelector(".detectionError");
+    detectionError.textContent = check.detectionError || "";
+    detectionError.hidden = !check.detectionError;
+  }
+
   function wireCropPicker(node, source, check, crop) {
     const fgButton = node.querySelector(".pickFg");
     const bgButton = node.querySelector(".pickBg");
@@ -436,6 +448,7 @@
       const pixel = source.canvas.getContext("2d", { willReadFrequently: true }).getImageData(x, y, 1, 1).data;
       check[check.pickTarget || "foreground"] = [pixel[0], pixel[1], pixel[2]];
       check.ratio = contrastRatio(check.foreground, check.background);
+      check.detectionError = null;
       render();
     });
   }
@@ -792,6 +805,7 @@
     const pixel = source.canvas.getContext("2d", { willReadFrequently: true }).getImageData(x, y, 1, 1).data;
     check[check.pickTarget || "foreground"] = [pixel[0], pixel[1], pixel[2]];
     check.ratio = contrastRatio(check.foreground, check.background);
+    check.detectionError = null;
     render();
     renderSnippet();
   }
@@ -1079,6 +1093,7 @@
       ratio: contrastRatio(sample.foreground, sample.background),
       method: sample.method,
       confidence: sample.confidence,
+      detectionError: sample.detectionError || null,
       ocrRasterMismatch: sample.ocrRasterMismatch || null,
       pickTarget: "foreground"
     };
@@ -1341,14 +1356,24 @@
     const analysisSample = sampleColorsFromAnalysis(source, rect);
     const rasterSample = sampleColors(source, rect);
     if (analysisSample) {
-      return {
+      return withSameColorDetectionError({
         ...analysisSample,
         ocrRasterMismatch: analysisSample.method === "ocr-raster"
           ? ocrRasterMismatch(analysisSample, rasterSample)
           : null
+      });
+    }
+    return withSameColorDetectionError({ ...rasterSample, method: "raster-fallback", confidence: 0.5 });
+  }
+
+  function withSameColorDetectionError(sample) {
+    if (!sample.detectionError && rgbEqual(sample.foreground, sample.background)) {
+      return {
+        ...sample,
+        detectionError: "Could not detect foreground colour. Select manually."
       };
     }
-    return { ...rasterSample, method: "raster-fallback", confidence: 0.5 };
+    return sample;
   }
 
   function ocrRasterMismatch(ocrSample, rasterSample) {
@@ -1491,7 +1516,11 @@
     const sorted = colorClustersForRect(source, rect);
 
     if (sorted.length === 0) {
-      return { foreground: [0, 0, 0], background: [255, 255, 255] };
+      return {
+        foreground: [0, 0, 0],
+        background: [0, 0, 0],
+        detectionError: "Could not detect foreground or background colour. Select manually."
+      };
     }
 
     const background = sorted[0].rgb;
@@ -1515,7 +1544,15 @@
           contrast: contrastRatio(cluster.rgb, background)
         }))
         .sort((a, b) => b.contrast - a.contrast)[0];
-      foreground = alternative?.rgb ?? (luminance(background) >= 0.5 ? [0, 0, 0] : [255, 255, 255]);
+      if (alternative) {
+        foreground = alternative.rgb;
+      } else {
+        return {
+          foreground,
+          background,
+          detectionError: "Could not detect foreground colour. Select manually."
+        };
+      }
     }
 
     return { foreground, background };

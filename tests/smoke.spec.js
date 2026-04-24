@@ -6,11 +6,13 @@ const { test, expect } = require("@playwright/test");
 
 const fixtureDir = path.join(os.tmpdir(), "contrast-check-fixtures");
 const pngPath = path.join(fixtureDir, "contrast-sample.png");
+const solidPngPath = path.join(fixtureDir, "contrast-solid.png");
 const pdfPath = path.join(fixtureDir, "contrast-sample.pdf");
 
 test.beforeAll(() => {
   fs.mkdirSync(fixtureDir, { recursive: true });
   fs.writeFileSync(pngPath, makePngFixture(900, 520));
+  fs.writeFileSync(solidPngPath, makeSolidPngFixture(240, 180, [0x22, 0x88, 0x44, 0xff]));
   fs.writeFileSync(pdfPath, makePdfFixture());
 });
 
@@ -94,6 +96,23 @@ test("hex manual input accepts 3-digit shorthand", async ({ page }) => {
   await page.locator(".fgInput").fill("#f0a");
   await page.locator(".fgInput").press("Tab");
   await expect(page.locator(".fgInput")).toHaveValue("#FF00AA");
+});
+
+test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(solidPngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page, [20, 20, 220, 160]);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+  await expect(page.locator(".detectionError")).toHaveText("Could not detect foreground colour. Select manually.");
+  await expect(page.locator(".fgInput")).toHaveValue("#228844");
+  await expect(page.locator(".bgInput")).toHaveValue("#228844");
+  await expect(page.locator(".ratio")).toHaveText("1.00:1");
+
+  await page.locator(".fgInput").fill("#FFFFFF");
+  await page.locator(".fgInput").press("Tab");
+  await expect(page.locator(".detectionError")).toBeHidden();
 });
 
 test("exports long check tables across PDF pages", async ({ page }) => {
@@ -201,6 +220,29 @@ function makePngFixture(width, height) {
         (x >= 100 && x <= 610 && y >= 340 && y <= 365) ||
         (x >= 100 && x <= 570 && y >= 385 && y <= 410)
       ) color = [0x00, 0x1c, 0x3e, 0xff];
+      const i = 1 + x * 4;
+      row[i] = color[0];
+      row[i + 1] = color[1];
+      row[i + 2] = color[2];
+      row[i + 3] = color[3];
+    }
+    rows.push(row);
+  }
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", Buffer.concat([u32(width), u32(height), Buffer.from([8, 6, 0, 0, 0])])),
+    pngChunk("IDAT", zlib.deflateSync(Buffer.concat(rows))),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
+function makeSolidPngFixture(width, height, color) {
+  const rows = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 4);
+    row[0] = 0;
+    for (let x = 0; x < width; x += 1) {
       const i = 1 + x * 4;
       row[i] = color[0];
       row[i + 1] = color[1];

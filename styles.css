@@ -400,7 +400,8 @@ canvas {
 }
 
 .methodBadge,
-.mismatchBadge {
+.mismatchBadge,
+.detectionError {
   display: inline-flex;
   width: fit-content;
   margin: -4px 12px 10px;
@@ -420,8 +421,14 @@ canvas {
   color: #6d4b00;
 }
 
+.detectionError {
+  background: #fde8e5;
+  color: var(--red);
+}
+
 .methodBadge[hidden],
-.mismatchBadge[hidden] {
+.mismatchBadge[hidden],
+.detectionError[hidden] {
   display: none;
 }
 
