@@ -1329,7 +1329,8 @@
     const gap = Math.max(2, Math.round(BADGE_GAP_SCREEN * scale));
     source.checks.forEach((check, index) => {
       ctx.save();
-      ctx.lineWidth = 4 * scale;
+      const isActive = source.id === state.activeSourceId && check.id === state.activeCheckId;
+      ctx.lineWidth = isActive ? 3 : 2;
       const { strokeRgb } = markingColorsForCheckRect(source, check.rect);
       ctx.strokeStyle = rgbToCss(strokeRgb);
       ctx.fillStyle = rgbaCss(strokeRgb, 0.14);
