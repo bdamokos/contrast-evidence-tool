@@ -219,25 +219,49 @@
     }
   }
 
+  const BADGE_GAP_SCREEN = 6;
+
+  /**
+   * Same badge anchor everywhere (main overlay, editor, PDF export): try above → right → below →
+   * left of the selection rect, then clamp inside bounds. `rect` and `bounds` share one space.
+   */
+  function computeBadgeTopLeft(rect, bounds, badgeWidth, badgeHeight, gap) {
+    const margin = 4;
+    const positions = [
+      { x: rect.x, y: rect.y - badgeHeight - gap },
+      { x: rect.x + rect.width + gap, y: rect.y },
+      { x: rect.x, y: rect.y + rect.height + gap },
+      { x: rect.x - badgeWidth - gap, y: rect.y }
+    ];
+    const chosen = positions.find((pos) => (
+      pos.x >= margin &&
+      pos.y >= margin &&
+      pos.x + badgeWidth <= bounds.width - margin &&
+      pos.y + badgeHeight <= bounds.height - margin
+    )) || positions[0];
+    return {
+      x: clamp(chosen.x, margin, Math.max(margin, bounds.width - badgeWidth - margin)),
+      y: clamp(chosen.y, margin, Math.max(margin, bounds.height - badgeHeight - margin))
+    };
+  }
+
+  function reportAnnotationScale(sourceWidth) {
+    return Math.max(1, Math.round(sourceWidth / 1200));
+  }
+
+  function reportBadgeDimensions(number, scale) {
+    const label = String(number);
+    return {
+      width: Math.max(34 * scale, label.length * 14 * scale + 18 * scale),
+      height: 30 * scale
+    };
+  }
+
   function drawNumberBadge(ctx, number, rect, bounds, source, displayRect, checkRectSource) {
     const label = String(number);
     const width = Math.max(24, label.length * 10 + 14);
     const height = 24;
-    const gap = 6;
-    const positions = [
-      { x: rect.x, y: rect.y - height - gap },
-      { x: rect.x + rect.width + gap, y: rect.y },
-      { x: rect.x, y: rect.y + rect.height + gap },
-      { x: rect.x - width - gap, y: rect.y }
-    ];
-    const chosen = positions.find((pos) => (
-      pos.x >= 4 &&
-      pos.y >= 4 &&
-      pos.x + width <= bounds.width - 4 &&
-      pos.y + height <= bounds.height - 4
-    )) || positions[0];
-    const bx = clamp(chosen.x, 4, Math.max(4, bounds.width - width - 4));
-    const by = clamp(chosen.y, 4, Math.max(4, bounds.height - height - 4));
+    const { x: bx, y: by } = computeBadgeTopLeft(rect, bounds, width, height, BADGE_GAP_SCREEN);
 
     let fillRgb = BADGE_FILL_CANDIDATES[0];
     let textRgb = [255, 255, 255];
@@ -1266,7 +1290,8 @@
     canvas.height = source.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(source.canvas, 0, 0);
-    const scale = Math.max(1, Math.round(source.width / 1200));
+    const scale = reportAnnotationScale(source.width);
+    const gap = Math.max(2, Math.round(BADGE_GAP_SCREEN * scale));
     source.checks.forEach((check, index) => {
       ctx.save();
       ctx.lineWidth = 4 * scale;
@@ -1275,16 +1300,23 @@
       ctx.fillStyle = rgbaCss(strokeRgb, 0.14);
       ctx.fillRect(check.rect.x, check.rect.y, check.rect.width, check.rect.height);
       ctx.strokeRect(check.rect.x, check.rect.y, check.rect.width, check.rect.height);
-      drawReportBadge(ctx, source, index + 1, check.rect.x + 8 * scale, check.rect.y + 8 * scale, scale);
+      const n = index + 1;
+      const { width: bw, height: bh } = reportBadgeDimensions(n, scale);
+      const { x: bx, y: by } = computeBadgeTopLeft(
+        check.rect,
+        { width: source.width, height: source.height },
+        bw,
+        bh,
+        gap
+      );
+      drawReportBadge(ctx, source, n, bx, by, bw, bh, scale);
       ctx.restore();
     });
     return canvas.toDataURL("image/jpeg", 0.9);
   }
 
-  function drawReportBadge(ctx, source, number, x, y, scale) {
+  function drawReportBadge(ctx, source, number, x, y, width, height, scale) {
     const label = String(number);
-    const width = Math.max(34 * scale, label.length * 14 * scale + 18 * scale);
-    const height = 30 * scale;
     const { fill, textRgb } = badgeColorsForSourceBadgeBox(source, x, y, width, height);
     ctx.fillStyle = rgbToCss(fill);
     ctx.fillRect(x, y, width, height);
