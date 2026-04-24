@@ -333,17 +333,21 @@ canvas {
   z-index: 3;
 }
 
-.rectangleDeleteHandle {
+.rectangleDeleteHandle,
+.rectangleResizeHandle {
   position: absolute;
   width: 20px;
   height: 20px;
-  border: 2px solid var(--red);
   background: #fff;
-  color: var(--red);
   cursor: pointer;
   pointer-events: auto;
   font-size: 0;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.rectangleDeleteHandle {
+  border: 2px solid var(--red);
+  color: var(--red);
 }
 
 .rectangleDeleteHandle::before,
@@ -363,6 +367,36 @@ canvas {
 
 .rectangleDeleteHandle::after {
   transform: rotate(-45deg);
+}
+
+.rectangleResizeHandle {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--blue-dark);
+  color: var(--blue-dark);
+  cursor: nwse-resize;
+}
+
+.rectangleResizeHandle::before {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
+.rectangleResizeHandle::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
 }
 
 .emptyState {

@@ -125,6 +125,57 @@ test("removes rectangles from their overlay delete buttons", async ({ page }) =>
   await expect(page.locator(".sampleCard")).toHaveCount(1);
 });
 
+test("resizes rectangles from their bottom-right handles", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page, [150, 160, 360, 240]);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+
+  const before = await page.locator(".cropPreview").evaluate((img) => ({
+    width: img.naturalWidth,
+    height: img.naturalHeight
+  }));
+  const handle = page.locator(".rectangleResizeHandle").first();
+  const box = await handle.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2 + 55, { steps: 8 });
+  await page.mouse.up();
+
+  await expect.poll(async () => {
+    const after = await page.locator(".cropPreview").evaluate((img) => ({
+      width: img.naturalWidth,
+      height: img.naturalHeight
+    }));
+    return after.width > before.width && after.height > before.height;
+  }).toBe(true);
+  const after = await page.locator(".cropPreview").evaluate((img) => ({
+    width: img.naturalWidth,
+    height: img.naturalHeight
+  }));
+  expect(after.width).toBeGreaterThan(before.width);
+  expect(after.height).toBeGreaterThan(before.height);
+  await expect(page.locator(".rectangleResizeHandle")).toHaveCount(1);
+});
+
+test("reset removes rectangle overlay controls", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page);
+  await expect(page.locator(".rectangleDeleteHandle")).toHaveCount(1);
+  await expect(page.locator(".rectangleResizeHandle")).toHaveCount(1);
+
+  await page.locator("#resetButton").click();
+  await expect(page.locator(".rectangleDeleteHandle")).toHaveCount(0);
+  await expect(page.locator(".rectangleResizeHandle")).toHaveCount(0);
+  await expect(page.locator(".sourceCard")).toHaveCount(0);
+});
+
 test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(solidPngPath);

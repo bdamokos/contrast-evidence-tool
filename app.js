@@ -28,6 +28,12 @@
     pendingPdf: null
   };
 
+  function clearInteractionState() {
+    state.draftRect = null;
+    state.dragStart = null;
+    state.resizeDrag = null;
+  }
+
   const BADGE_DETAILS = {
     aaNormal: {
       label: "AA normal",
@@ -235,12 +241,23 @@
 
   const BADGE_GAP_SCREEN = 6;
   const DELETE_HANDLE_SIZE = 20;
+  const RESIZE_HANDLE_SIZE = 18;
 
   function deleteHandleRect(displayRect, bounds) {
     const size = DELETE_HANDLE_SIZE;
     return {
       x: clamp(displayRect.x + displayRect.width - size / 2, 4, Math.max(4, bounds.width - size - 4)),
       y: clamp(displayRect.y - size / 2, 4, Math.max(4, bounds.height - size - 4)),
+      width: size,
+      height: size
+    };
+  }
+
+  function resizeHandleRect(displayRect, bounds) {
+    const size = RESIZE_HANDLE_SIZE;
+    return {
+      x: clamp(displayRect.x + displayRect.width - size + 2, 4, Math.max(4, bounds.width - size - 4)),
+      y: clamp(displayRect.y + displayRect.height - size + 2, 4, Math.max(4, bounds.height - size - 4)),
       width: size,
       height: size
     };
@@ -259,23 +276,37 @@
 
     source.checks.forEach((check, index) => {
       const rect = sourceRectToDisplay(check.rect, displayRect);
-      const box = deleteHandleRect(rect, bounds);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "rectangleDeleteHandle";
-      button.setAttribute("aria-label", `Remove rectangle ${index + 1}`);
-      button.style.left = `${box.x}px`;
-      button.style.top = `${box.y}px`;
-      button.addEventListener("pointerdown", (event) => {
+      const deleteBox = deleteHandleRect(rect, bounds);
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "rectangleDeleteHandle";
+      deleteButton.setAttribute("aria-label", `Remove rectangle ${index + 1}`);
+      deleteButton.style.left = `${deleteBox.x}px`;
+      deleteButton.style.top = `${deleteBox.y}px`;
+      deleteButton.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         event.stopPropagation();
       });
-      button.addEventListener("click", (event) => {
+      deleteButton.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         removeCheck(source, check.id);
       });
-      layer.append(button);
+      layer.append(deleteButton);
+
+      const resizeBox = resizeHandleRect(rect, bounds);
+      const resizeButton = document.createElement("button");
+      resizeButton.type = "button";
+      resizeButton.className = "rectangleResizeHandle";
+      resizeButton.setAttribute("aria-label", `Resize rectangle ${index + 1}`);
+      resizeButton.style.left = `${resizeBox.x}px`;
+      resizeButton.style.top = `${resizeBox.y}px`;
+      resizeButton.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        startResizeDrag(event, source, check, target);
+      });
+      layer.append(resizeButton);
     });
   }
 
@@ -590,6 +621,41 @@
     };
   }
 
+  function rectFromAnchorAndPoint(anchor, point, source) {
+    return normalizeRect(anchor, point, source);
+  }
+
+  function refreshCheckAfterRectChange(source, check) {
+    const sample = sampleColorsForRect(source, check.rect);
+    check.cropDataUrl = cropData(source, check.rect);
+    check.foreground = sample.foreground;
+    check.background = sample.background;
+    check.ratio = contrastRatio(sample.foreground, sample.background);
+    check.method = sample.method;
+    check.confidence = sample.confidence;
+    check.detectionError = sample.detectionError || null;
+    check.ocrRasterMismatch = sample.ocrRasterMismatch || null;
+  }
+
+  function startResizeDrag(event, source, check, target) {
+    const pointerCanvas = target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas;
+    state.resizeDrag = {
+      sourceId: source.id,
+      checkId: check.id,
+      target,
+      anchor: {
+        x: check.rect.x,
+        y: check.rect.y
+      }
+    };
+    state.activeSourceId = source.id;
+    state.activeCheckId = check.id;
+    state.dragStart = null;
+    state.draftRect = null;
+    pointerCanvas.setPointerCapture(event.pointerId);
+    drawTargetOverlay(target);
+  }
+
   function onPointerDown(event, target = "main") {
     const source = activeSource();
     if (!source) return;
@@ -604,15 +670,38 @@
 
   function onPointerMove(event, target = "main") {
     const source = activeSource();
-    if (!source || !state.dragStart) return;
+    if (!source) return;
     const point = displayPointToSource(event, target);
     if (!point) return;
+    if (state.resizeDrag) {
+      const resizeSource = state.sources.find((item) => item.id === state.resizeDrag.sourceId);
+      const check = resizeSource?.checks.find((item) => item.id === state.resizeDrag.checkId);
+      if (!resizeSource || !check) return;
+      check.rect = rectFromAnchorAndPoint(state.resizeDrag.anchor, point, resizeSource);
+      check.cropDataUrl = cropData(resizeSource, check.rect);
+      drawTargetOverlay(target);
+      renderDeleteHandles(target);
+      return;
+    }
+    if (!state.dragStart) return;
     state.draftRect = normalizeRect(state.dragStart, point, source);
     drawTargetOverlay(target);
   }
 
   function onPointerUp(event, target = "main") {
     const source = activeSource();
+    if (state.resizeDrag) {
+      const resizeSource = state.sources.find((item) => item.id === state.resizeDrag.sourceId);
+      const check = resizeSource?.checks.find((item) => item.id === state.resizeDrag.checkId);
+      (target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas).releasePointerCapture(event.pointerId);
+      if (resizeSource && check) {
+        refreshCheckAfterRectChange(resizeSource, check);
+      }
+      state.resizeDrag = null;
+      render();
+      if (els.editorDialog.open) renderEditor();
+      return;
+    }
     if (!source || !state.dragStart || !state.draftRect) return;
     (target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas).releasePointerCapture(event.pointerId);
     const rect = state.draftRect;
@@ -649,8 +738,7 @@
   function openEditor() {
     const source = activeSource();
     if (!source) return;
-    state.dragStart = null;
-    state.draftRect = null;
+    clearInteractionState();
     state.editorScale = 0;
     els.editorDialog.showModal();
     requestAnimationFrame(() => {
@@ -660,8 +748,7 @@
   }
 
   function closeEditor() {
-    state.dragStart = null;
-    state.draftRect = null;
+    clearInteractionState();
     els.editorDialog.close();
     render();
   }
@@ -2593,8 +2680,7 @@
     if (!state.dragStart && !state.draftRect) openEditor();
   });
   els.overlayCanvas.addEventListener("pointercancel", () => {
-    state.dragStart = null;
-    state.draftRect = null;
+    clearInteractionState();
     drawOverlay();
   });
 
@@ -2602,8 +2688,7 @@
   els.editorOverlayCanvas.addEventListener("pointermove", (event) => onPointerMove(event, "editor"));
   els.editorOverlayCanvas.addEventListener("pointerup", (event) => onPointerUp(event, "editor"));
   els.editorOverlayCanvas.addEventListener("pointercancel", () => {
-    state.dragStart = null;
-    state.draftRect = null;
+    clearInteractionState();
     drawEditorOverlay();
   });
   els.zoomOutButton.addEventListener("click", () => zoomEditor(0.8));
@@ -2614,8 +2699,7 @@
   });
   els.closeEditorButton.addEventListener("click", closeEditor);
   els.editorDialog.addEventListener("close", () => {
-    state.dragStart = null;
-    state.draftRect = null;
+    clearInteractionState();
     render();
   });
 
@@ -2643,6 +2727,9 @@
     state.sources = [];
     state.activeSourceId = null;
     state.activeCheckId = null;
+    clearInteractionState();
+    els.overlayDeleteLayer?.replaceChildren();
+    els.editorDeleteLayer?.replaceChildren();
     render();
   });
   els.openEditorButton.addEventListener("click", openEditor);
