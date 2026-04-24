@@ -50,6 +50,22 @@
             </div>
             <canvas id="imageCanvas"></canvas>
             <canvas id="overlayCanvas" aria-label="Selection overlay"></canvas>
+            <div
+              id="pdfPreparingOverlay"
+              class="pdfPreparingOverlay"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+              hidden
+            >
+              <div class="pdfPreparingOverlay__card">
+                <span class="pdfPreparingOverlay__spinner" aria-hidden="true"></span>
+                <div class="pdfPreparingOverlay__copy">
+                  <strong>Loading PDF</strong>
+                  <p id="pdfPreparingStatusText"></p>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="hint">
             <span>Use Open full screen for accurate marking</span>

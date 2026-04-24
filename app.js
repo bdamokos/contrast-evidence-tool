@@ -56,6 +56,8 @@
     activeSourceTitle: document.querySelector("#activeSourceTitle"),
     activeSourceMeta: document.querySelector("#activeSourceMeta"),
     dropZone: document.querySelector("#dropZone"),
+    pdfPreparingOverlay: document.querySelector("#pdfPreparingOverlay"),
+    pdfPreparingStatusText: document.querySelector("#pdfPreparingStatusText"),
     imageCanvas: document.querySelector("#imageCanvas"),
     overlayCanvas: document.querySelector("#overlayCanvas"),
     status: document.querySelector("#status"),
@@ -861,27 +863,60 @@
     state.activeSourceId = state.sources[state.sources.length - 1].id;
   }
 
+  function showPdfPreparing(message) {
+    els.pdfPreparingStatusText.textContent = message;
+    els.pdfPreparingOverlay.hidden = false;
+    els.dropZone.classList.add("isPdfPreparing");
+    els.dropZone.setAttribute("aria-busy", "true");
+  }
+
+  function hidePdfPreparing() {
+    els.pdfPreparingOverlay.hidden = true;
+    els.dropZone.classList.remove("isPdfPreparing");
+    els.dropZone.removeAttribute("aria-busy");
+    els.pdfPreparingStatusText.textContent = "";
+  }
+
+  async function setPdfPreparingMessage(message) {
+    els.pdfPreparingStatusText.textContent = message;
+    await yieldPdfImportUi();
+  }
+
   async function choosePdfPages(file) {
     if (!window.pdfjsLib) {
       alert("PDF support did not load. Check your network connection and try again.");
       return;
     }
-    const bytes = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
-    state.pendingPdf = { file, pdf };
-    els.pdfDialogMeta.textContent = `${file.name} has ${pdf.numPages} pages. Import one page or a range.`;
-    els.pdfPageControls.innerHTML = `
+    const sizeLabel =
+      typeof file.size === "number" && file.size > 0
+        ? ` (${file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`})`
+        : "";
+    showPdfPreparing(`Reading file${sizeLabel}…`);
+    await yieldPdfImportUi();
+    try {
+      const bytes = await file.arrayBuffer();
+      await setPdfPreparingMessage("Parsing PDF — building page list…");
+      const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+      state.pendingPdf = { file, pdf };
+      els.pdfDialogMeta.textContent = `${file.name} has ${pdf.numPages} pages. Import one page or a range.`;
+      els.pdfPageControls.innerHTML = `
       <label>Start page<input id="pdfStartPage" type="number" min="1" max="${pdf.numPages}" value="1"></label>
       <label>End page<input id="pdfEndPage" type="number" min="1" max="${pdf.numPages}" value="${pdf.numPages}"></label>
     `;
-    els.pdfImportStatus.hidden = true;
-    els.pdfImportStatusText.textContent = "";
-    els.importPdfPagesButton.disabled = false;
-    els.pdfImportCancelButton.disabled = false;
-    els.pdfDialog.showModal();
-    await new Promise((resolve) => {
-      els.pdfDialog.addEventListener("close", resolve, { once: true });
-    });
+      els.pdfImportStatus.hidden = true;
+      els.pdfImportStatusText.textContent = "";
+      els.importPdfPagesButton.disabled = false;
+      els.pdfImportCancelButton.disabled = false;
+      hidePdfPreparing();
+      els.pdfDialog.showModal();
+      await new Promise((resolve) => {
+        els.pdfDialog.addEventListener("close", resolve, { once: true });
+      });
+    } catch (err) {
+      console.error(err);
+      hidePdfPreparing();
+      alert(`Could not open this PDF. ${err && err.message ? err.message : "Unknown error."}`);
+    }
   }
 
   function yieldPdfImportUi() {
