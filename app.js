@@ -25,6 +25,7 @@
     fileInput: document.querySelector("#fileInput"),
     exportButton: document.querySelector("#exportButton"),
     resetButton: document.querySelector("#resetButton"),
+    openEditorButton: document.querySelector("#openEditorButton"),
     deleteSourceButton: document.querySelector("#deleteSourceButton"),
     sourceCount: document.querySelector("#sourceCount"),
     sourcesList: document.querySelector("#sourcesList"),
@@ -320,6 +321,7 @@
     const hasChecks = state.sources.some((source) => source.checks.length > 0);
     els.exportButton.disabled = !hasChecks;
     els.resetButton.disabled = !hasSources;
+    els.openEditorButton.disabled = !activeSource();
     els.deleteSourceButton.disabled = !activeSource();
   }
 
@@ -970,6 +972,7 @@
     state.activeCheckId = null;
     render();
   });
+  els.openEditorButton.addEventListener("click", openEditor);
   els.deleteSourceButton.addEventListener("click", () => {
     const current = activeSource();
     if (!current) return;
