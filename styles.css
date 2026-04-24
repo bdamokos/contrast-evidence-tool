@@ -155,8 +155,8 @@ h2 {
 }
 
 .siteFooter p {
-  max-width: 72ch;
   margin: 0 auto;
+  white-space: nowrap;
 }
 
 .siteFooter .sourceLink {
@@ -1027,6 +1027,10 @@ menu {
 
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .siteFooter p {
+    white-space: normal;
   }
 
   .actions,
