@@ -41,7 +41,6 @@ input:focus-visible {
 }
 
 .shell {
-  position: relative;
   width: 100vw;
   height: 100vh;
   margin: 0 auto;
@@ -143,10 +142,9 @@ h2 {
 }
 
 .siteFooter {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 8px;
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 4px 2px 2px;
   text-align: center;
   color: var(--muted);
   font-size: 12px;
