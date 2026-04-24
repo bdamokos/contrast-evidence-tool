@@ -1119,16 +1119,19 @@
     doc.setTextColor(0, 0, 0);
     y += 10;
 
+    let exportSectionNumber = 0;
     for (const [sourceIndex, source] of state.sources.entries()) {
       if (source.checks.length === 0) continue;
       if (sourceIndex > 0 || y > page.margin) {
         doc.addPage();
       }
       y = page.margin;
+      exportSectionNumber += 1;
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(13);
-      doc.text(`${sourceIndex + 1}. ${source.name}`, page.margin, y, { maxWidth: page.width - page.margin * 2 });
+      const exportTitleName = source.name.replace(/\s*-\s*page\s+\d+$/i, "");
+      doc.text(`${exportSectionNumber}. ${exportTitleName}`, page.margin, y, { maxWidth: page.width - page.margin * 2 });
       y += 7;
 
       const imageWidth = page.width - page.margin * 2;
@@ -1136,14 +1139,15 @@
       doc.addImage(annotatedImageData(source), "JPEG", page.margin, y, imageWidth, imageHeight);
       y += imageHeight + 8;
 
-      y = drawTableHeader(doc, page, y);
+      const tableLayout = pdfTableLayout(source);
+      y = drawTableHeader(doc, page, y, tableLayout);
       for (const [checkIndex, check] of source.checks.entries()) {
         if (y + CHECK_ROW_HEIGHT > page.bottom) {
           doc.addPage();
           y = page.margin;
-          y = drawTableHeader(doc, page, y);
+          y = drawTableHeader(doc, page, y, tableLayout);
         }
-        y = drawCheckRow(doc, page, y, check, checkIndex + 1);
+        y = drawCheckRow(doc, page, y, check, checkIndex + 1, tableLayout);
       }
       y += 8;
     }
@@ -1151,38 +1155,73 @@
     doc.save(`contrast-check-${dateStamp()}.pdf`);
   }
 
-  function drawTableHeader(doc, page, y) {
+  function isDefaultCheckLabel(label) {
+    return /^\s*Check\s+\d+\s*$/i.test(String(label || ""));
+  }
+
+  function pdfTableLayout(source) {
+    const showLabelCol = source.checks.some((check) => !isDefaultCheckLabel(check.label));
+    if (showLabelCol) {
+      return {
+        showLabelCol: true,
+        num: page => page.margin + 2,
+        crop: page => page.margin + 12,
+        label: page => page.margin + 45,
+        labelMaxW: 32,
+        colors: page => page.margin + 82,
+        ratio: page => page.margin + 122,
+        result: page => page.margin + 142
+      };
+    }
+    return {
+      showLabelCol: false,
+      num: page => page.margin + 2,
+      crop: page => page.margin + 12,
+      label: null,
+      labelMaxW: 0,
+      colors: page => page.margin + 45,
+      ratio: page => page.margin + 100,
+      result: page => page.margin + 130
+    };
+  }
+
+  function drawTableHeader(doc, page, y, layout) {
     doc.setFillColor(21, 87, 166);
     doc.rect(page.margin, y, page.width - page.margin * 2, 8, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.text("#", page.margin + 2, y + 5.5);
-    doc.text("Crop", page.margin + 12, y + 5.5);
-    doc.text("Label", page.margin + 45, y + 5.5);
-    doc.text("Colors", page.margin + 82, y + 5.5);
-    doc.text("Ratio", page.margin + 122, y + 5.5);
-    doc.text("Result", page.margin + 142, y + 5.5);
+    doc.text("#", layout.num(page), y + 5.5);
+    doc.text("Crop", layout.crop(page), y + 5.5);
+    if (layout.showLabelCol) {
+      doc.text("Label", layout.label(page), y + 5.5);
+    }
+    doc.text("Colors", layout.colors(page), y + 5.5);
+    doc.text("Ratio", layout.ratio(page), y + 5.5);
+    doc.text("Result", layout.result(page), y + 5.5);
     doc.setTextColor(0, 0, 0);
     return y + 9;
   }
 
   const CHECK_ROW_HEIGHT = 27;
 
-  function drawCheckRow(doc, page, y, check, number) {
+  function drawCheckRow(doc, page, y, check, number, layout) {
     doc.setDrawColor(216, 209, 194);
     doc.rect(page.margin, y, page.width - page.margin * 2, CHECK_ROW_HEIGHT);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text(String(number), page.margin + 2, y + 7);
-    drawCropPreview(doc, check, page.margin + 12, y + 3, 26, 18);
+    doc.text(String(number), layout.num(page), y + 7);
+    drawCropPreview(doc, check, layout.crop(page), y + 3, 26, 18);
     doc.setFont("helvetica", "normal");
-    doc.text(check.label || `Check ${number}`, page.margin + 45, y + 7, { maxWidth: 32 });
-    drawColorValue(doc, `FG ${rgbToHex(check.foreground)}`, check.foreground, page.margin + 82, y + 7);
-    drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, page.margin + 82, y + 13);
+    if (layout.showLabelCol && !isDefaultCheckLabel(check.label)) {
+      doc.text(check.label || `Check ${number}`, layout.label(page), y + 7, { maxWidth: layout.labelMaxW });
+    }
+    const cx = layout.colors(page);
+    drawColorValue(doc, `FG ${rgbToHex(check.foreground)}`, check.foreground, cx, y + 7);
+    drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, cx, y + 13);
     doc.setFont("helvetica", "bold");
-    doc.text(`${formatRatio(check.ratio)}:1`, page.margin + 122, y + 7);
-    drawResultValue(doc, check, page.margin + 142, y + 7);
+    doc.text(`${formatRatio(check.ratio)}:1`, layout.ratio(page), y + 7);
+    drawResultValue(doc, check, layout.result(page), y + 7);
     doc.setTextColor(0, 0, 0);
     return y + CHECK_ROW_HEIGHT;
   }
