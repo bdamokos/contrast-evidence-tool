@@ -218,20 +218,34 @@ test("exports long check tables across PDF pages", async ({ page }) => {
   expect(countPdfPages(exportPath)).toBe(3);
 });
 
-test("imports a selected PDF page as a source", async ({ page }) => {
+test("imports a single-page PDF directly as a source", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(pdfPath);
-  await expect(page.locator("#pdfDialog")).toBeVisible();
-  await page.locator("#importPdfPagesButton").click();
+  await expect(page.locator("#pdfDialog")).not.toBeVisible();
   await expect(page.locator(".sourceCard")).toHaveCount(1);
   await expect(page.locator(".sourceMeta")).toContainText("pdf page");
+});
+
+test("exports imported PDF pages with page numbers in source titles", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pdfPath);
+  await expect(page.locator("#pdfDialog")).not.toBeVisible();
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page, [90, 90, 500, 180]);
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#exportButton").click();
+  const download = await downloadPromise;
+  const exportPath = path.join(fixtureDir, "pdf-page-title-report.pdf");
+  await download.saveAs(exportPath);
+  expect(fs.readFileSync(exportPath, "latin1")).toContain("contrast-sample.pdf - page 1");
 });
 
 test("detects PDF-native text blocks and tags generated checks", async ({ page }) => {
   await page.goto("/?debugSampling=1");
   await page.locator("#fileInput").setInputFiles(pdfPath);
-  await expect(page.locator("#pdfDialog")).toBeVisible();
-  await page.locator("#importPdfPagesButton").click();
+  await expect(page.locator("#pdfDialog")).not.toBeVisible();
   await expect(page.locator(".sourceCard")).toHaveCount(1);
   await expect(page.locator("#activeSourceMeta")).toContainText("text blocks");
 

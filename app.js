@@ -1118,6 +1118,22 @@
     try {
       await setPdfPreparingMessage("Parsing PDF — resolving page count…");
       const pdf = await openPdfDocumentForFile(file);
+      if (pdf.numPages === 1) {
+        try {
+          await importPdfPagesFromDocument({
+            file,
+            pdf,
+            start: 1,
+            end: 1,
+            setStatus: setPdfPreparingMessage
+          });
+          render();
+        } finally {
+          await pdf.destroy().catch(() => {});
+        }
+        hidePdfPreparing();
+        return;
+      }
       state.pendingPdf = { file, pdf };
       els.pdfDialogMeta.textContent = `${file.name} has ${pdf.numPages} pages. Import one page or a range.`;
       els.pdfPageControls.innerHTML = `
@@ -1158,15 +1174,52 @@
     await yieldPdfImportUi();
   }
 
+  async function importPdfPagesFromDocument({ file, pdf, start, end, setStatus }) {
+    const totalSelected = end - start + 1;
+    await setStatus("Working in the background — preparing pages…");
+    let done = 0;
+    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+      done += 1;
+      await setStatus(
+        `Working in the background — rendering page ${pageNumber} (${done} of ${totalSelected}).`
+      );
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      let analysis = null;
+      try {
+        await setStatus(
+          `Working in the background — reading text on page ${pageNumber} (${done} of ${totalSelected}).`
+        );
+        analysis = await buildPdfPageAnalysis(page, viewport, canvas, pageNumber);
+      } catch (analysisErr) {
+        console.warn("PDF text analysis failed", analysisErr);
+      }
+      addSource({
+        name: `${file.name} - page ${pageNumber}`,
+        type: "pdf page",
+        width: canvas.width,
+        height: canvas.height,
+        canvas,
+        analysis
+      });
+    }
+    await setStatus("Finishing up…");
+  }
+
   async function importPendingPdfPages(event) {
     event.preventDefault();
     if (!state.pendingPdf) return;
     const startInput = document.querySelector("#pdfStartPage");
     const endInput = document.querySelector("#pdfEndPage");
     const pdf = state.pendingPdf.pdf;
+    const file = state.pendingPdf.file;
     const start = clamp(Number(startInput.value) || 1, 1, pdf.numPages);
     const end = clamp(Number(endInput.value) || start, start, pdf.numPages);
-    const totalSelected = end - start + 1;
 
     els.importPdfPagesButton.disabled = true;
     els.pdfImportCancelButton.disabled = true;
@@ -1174,39 +1227,7 @@
     els.pdfDialog.setAttribute("aria-busy", "true");
 
     try {
-      await setPdfImportStatus("Working in the background — preparing pages…");
-      let done = 0;
-      for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
-        done += 1;
-        await setPdfImportStatus(
-          `Working in the background — rendering page ${pageNumber} (${done} of ${totalSelected}).`
-        );
-        const page = await pdf.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        let analysis = null;
-        try {
-          await setPdfImportStatus(
-            `Working in the background — reading text on page ${pageNumber} (${done} of ${totalSelected}).`
-          );
-          analysis = await buildPdfPageAnalysis(page, viewport, canvas, pageNumber);
-        } catch (analysisErr) {
-          console.warn("PDF text analysis failed", analysisErr);
-        }
-        addSource({
-          name: `${state.pendingPdf.file.name} - page ${pageNumber}`,
-          type: "pdf page",
-          width: canvas.width,
-          height: canvas.height,
-          canvas,
-          analysis
-        });
-      }
-      await setPdfImportStatus("Finishing up…");
+      await importPdfPagesFromDocument({ file, pdf, start, end, setStatus: setPdfImportStatus });
       const { pdf: openedPdf } = state.pendingPdf;
       state.pendingPdf = null;
       await openedPdf.destroy().catch(() => {});
@@ -2314,8 +2335,7 @@
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(13);
-      const exportTitleName = source.name.replace(/\s*-\s*page\s+\d+$/i, "");
-      doc.text(`${exportSectionNumber}. ${exportTitleName}`, page.margin, y, { maxWidth: page.width - page.margin * 2 });
+      doc.text(`${exportSectionNumber}. ${source.name}`, page.margin, y, { maxWidth: page.width - page.margin * 2 });
       y += 7;
 
       const imageWidth = page.width - page.margin * 2;
