@@ -19,6 +19,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  height: 100vh;
   overflow: hidden;
   background:
     linear-gradient(90deg, rgba(21, 87, 166, 0.07) 1px, transparent 1px),
@@ -26,6 +27,8 @@ body {
     var(--paper);
   background-size: 36px 36px;
   color: var(--ink);
+  display: flex;
+  flex-direction: column;
   font-family: Avenir Next, Avenir, Segoe UI, sans-serif;
 }
 
@@ -42,11 +45,12 @@ input:focus-visible {
 
 .shell {
   width: 100vw;
-  height: 100vh;
+  height: auto;
   margin: 0 auto;
   padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -143,18 +147,16 @@ h2 {
 
 .siteFooter {
   flex: 0 0 auto;
-  margin-top: 8px;
-  padding: 4px 2px 2px;
+  padding: 0 14px 10px;
   text-align: center;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
-  pointer-events: none;
 }
 
 .siteFooter p {
-  margin: 0;
-  white-space: nowrap;
+  max-width: 72ch;
+  margin: 0 auto;
 }
 
 .siteFooter .sourceLink {
@@ -162,7 +164,6 @@ h2 {
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 2px;
-  pointer-events: auto;
 }
 
 .siteFooter .sourceLink:hover {
@@ -993,7 +994,7 @@ menu {
 
   .shell {
     height: auto;
-    min-height: 100vh;
+    min-height: 0;
   }
 
   .workspace {

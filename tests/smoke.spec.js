@@ -61,7 +61,8 @@ test("opens an extracted snippet full screen for color picking", async ({ page }
   const point = await findCanvasDarkestPoint(page, "#snippetCanvas");
   expect(point).toBeTruthy();
   await page.mouse.click(box.x + point.x, box.y + point.y);
-  await expect(page.locator("#snippetBgValue")).not.toHaveText("#FFF200");
+  const pickedHex = await page.locator("#snippetBgValue").textContent();
+  expect(isDarkHex(pickedHex)).toBe(true);
 
   await page.locator("#closeSnippetButton").click();
   await expect(page.locator("#snippetDialog")).not.toBeVisible();
@@ -292,50 +293,6 @@ async function setNativeColor(page, selector, value) {
   }, value);
 }
 
-async function findCanvasPixel(page, selector, targetRgb, tolerance = 0) {
-  return await page.evaluate(({ selector: sel, targetRgb: target, tolerance: tol }) => {
-    const canvas = document.querySelector(sel);
-    if (!canvas) return null;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return null;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    if (!width || !height) return null;
-
-    const image = ctx.getImageData(0, 0, width, height).data;
-    const [tr, tg, tb] = target;
-    const step = Math.max(1, Math.floor(Math.min(width, height) / 120));
-
-    for (let y = 0; y < height; y += step) {
-      for (let x = 0; x < width; x += step) {
-        const i = (y * width + x) * 4;
-        const r = image[i];
-        const g = image[i + 1];
-        const b = image[i + 2];
-        if (Math.abs(r - tr) <= tol && Math.abs(g - tg) <= tol && Math.abs(b - tb) <= tol) {
-          return { x: x + 0.5, y: y + 0.5 };
-        }
-      }
-    }
-
-    // Fall back to exhaustive search if the coarse scan didn't find a match.
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const i = (y * width + x) * 4;
-        const r = image[i];
-        const g = image[i + 1];
-        const b = image[i + 2];
-        if (Math.abs(r - tr) <= tol && Math.abs(g - tg) <= tol && Math.abs(b - tb) <= tol) {
-          return { x: x + 0.5, y: y + 0.5 };
-        }
-      }
-    }
-
-    return null;
-  }, { selector, targetRgb, tolerance });
-}
-
 async function findCanvasDarkestPoint(page, selector) {
   return await page.evaluate(({ selector: sel }) => {
     const canvas = document.querySelector(sel);
@@ -401,6 +358,15 @@ async function findCanvasDarkestPoint(page, selector) {
 
     return best;
   }, { selector });
+}
+
+function isDarkHex(value) {
+  if (!/^#[0-9A-F]{6}$/i.test(value || "")) return false;
+  const r = Number.parseInt(value.slice(1, 3), 16);
+  const g = Number.parseInt(value.slice(3, 5), 16);
+  const b = Number.parseInt(value.slice(5, 7), 16);
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luma < 80;
 }
 
 async function pasteImageFromClipboard(page, filePath, fileName, mimeType) {
