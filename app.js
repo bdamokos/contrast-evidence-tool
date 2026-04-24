@@ -829,6 +829,7 @@
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
     const page = { width: 210, height: 297, margin: 14 };
+    page.bottom = page.height - page.margin;
     let y = page.margin;
     const checks = state.sources.flatMap((source) => source.checks);
     const failing = checks.filter((check) => check.ratio < 4.5).length;
@@ -846,10 +847,10 @@
 
     for (const [sourceIndex, source] of state.sources.entries()) {
       if (source.checks.length === 0) continue;
-      if (y > 240) {
+      if (sourceIndex > 0 || y > page.margin) {
         doc.addPage();
-        y = page.margin;
       }
+      y = page.margin;
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(13);
@@ -863,7 +864,7 @@
 
       y = drawTableHeader(doc, page, y);
       for (const [checkIndex, check] of source.checks.entries()) {
-        if (y > 260) {
+        if (y + CHECK_ROW_HEIGHT > page.bottom) {
           doc.addPage();
           y = page.margin;
           y = drawTableHeader(doc, page, y);
@@ -892,11 +893,11 @@
     return y + 9;
   }
 
+  const CHECK_ROW_HEIGHT = 27;
+
   function drawCheckRow(doc, page, y, check, number) {
-    const rowHeight = 27;
-    const pass = check.ratio >= 4.5;
     doc.setDrawColor(216, 209, 194);
-    doc.rect(page.margin, y, page.width - page.margin * 2, rowHeight);
+    doc.rect(page.margin, y, page.width - page.margin * 2, CHECK_ROW_HEIGHT);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.text(String(number), page.margin + 2, y + 7);
@@ -907,24 +908,34 @@
     drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, page.margin + 100, y + 13);
     doc.setFont("helvetica", "bold");
     doc.text(`${formatRatio(check.ratio)}:1`, page.margin + 140, y + 7);
-    doc.setTextColor(pass ? 23 : 180, pass ? 114 : 35, pass ? 69 : 24);
-    doc.text(pass ? "AA pass" : "AA fail", page.margin + 160, y + 7);
+    drawResultValue(doc, check, page.margin + 160, y + 7);
     doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`AA large ${check.ratio >= 3 ? "pass" : "fail"} | AAA ${check.ratio >= 7 ? "pass" : "fail"}`, page.margin + 160, y + 14);
-    return y + rowHeight;
+    return y + CHECK_ROW_HEIGHT;
   }
 
   function drawColorValue(doc, label, color, x, y) {
-    const swatchRadius = 1.8;
-    const centerX = x + swatchRadius;
+    const swatchRadius = 2.4;
+    const textWidth = doc.getTextWidth(label);
+    const centerX = x + textWidth + 4.2;
     const centerY = y - 1.4;
     const [r, g, b] = color;
     doc.setDrawColor(160, 150, 132);
     doc.setFillColor(r, g, b);
     doc.circle(centerX, centerY, swatchRadius, "FD");
-    doc.text(label, x + 6, y);
+    doc.setTextColor(0, 0, 0);
+    doc.text(label, x, y);
+  }
+
+  function drawResultValue(doc, check, x, y) {
+    const aaNormalPass = check.ratio >= 4.5;
+    const resultColor = aaNormalPass ? [23, 114, 69] : [180, 35, 24];
+    doc.setTextColor(...resultColor);
+    doc.text(`AA normal: ${aaNormalPass ? "pass" : "fail"}`, x, y, { maxWidth: 34 });
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.text(`AA large: ${check.ratio >= 3 ? "pass" : "fail"}`, x, y + 6, { maxWidth: 34 });
+    doc.text(`AAA: ${check.ratio >= 7 ? "pass" : "fail"}`, x, y + 11, { maxWidth: 34 });
   }
 
   function dateStamp() {

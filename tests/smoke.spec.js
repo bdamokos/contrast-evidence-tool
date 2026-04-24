@@ -27,6 +27,34 @@ test("uploads an image, marks checks, and exports a report", async ({ page }) =>
   await page.locator("#exportButton").click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/contrast-evidence-.*\.pdf/);
+  const exportPath = path.join(fixtureDir, "single-check-report.pdf");
+  await download.saveAs(exportPath);
+  expect(countPdfPages(exportPath)).toBe(2);
+});
+
+test("exports long check tables across PDF pages", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  for (const rect of [
+    [95, 115, 575, 145],
+    [95, 175, 495, 205],
+    [95, 235, 625, 265],
+    [95, 340, 610, 365],
+    [95, 385, 570, 410],
+    [75, 320, 715, 438]
+  ]) {
+    await drawCheck(page, rect);
+  }
+  await expect(page.locator(".sampleCard")).toHaveCount(6);
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#exportButton").click();
+  const download = await downloadPromise;
+  const exportPath = path.join(fixtureDir, "multi-check-report.pdf");
+  await download.saveAs(exportPath);
+  expect(countPdfPages(exportPath)).toBe(3);
 });
 
 test("imports a selected PDF page as a source", async ({ page }) => {
@@ -38,14 +66,20 @@ test("imports a selected PDF page as a source", async ({ page }) => {
   await expect(page.locator(".sourceMeta")).toContainText("pdf page");
 });
 
-async function drawCheck(page) {
+async function drawCheck(page, rect = [190, 210, 640, 315]) {
   const canvas = page.locator("#overlayCanvas");
   const box = await canvas.boundingBox();
   expect(box).toBeTruthy();
-  await page.mouse.move(box.x + 190, box.y + 210, { steps: 5 });
+  const [x1, y1, x2, y2] = rect;
+  await page.mouse.move(box.x + x1, box.y + y1, { steps: 5 });
   await page.mouse.down();
-  await page.mouse.move(box.x + 640, box.y + 315, { steps: 10 });
+  await page.mouse.move(box.x + x2, box.y + y2, { steps: 10 });
   await page.mouse.up();
+}
+
+function countPdfPages(filePath) {
+  const pdf = fs.readFileSync(filePath, "latin1");
+  return (pdf.match(/\/Type\s*\/Page\b/g) || []).length;
 }
 
 function makePngFixture(width, height) {
