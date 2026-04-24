@@ -2,11 +2,15 @@
   "use strict";
 
   /**
-   * Same version as index.html (pdf.mjs + modulepreload SRI). Worker fetches are not
-   * SRI-wrapped; pinning the exact jsdelivr file limits drift.
+   * Pinned to match index.html (pdf.mjs SRI). Worker script cannot use `<script integrity>`
+   * in HTML; we verify bytes with Web Crypto then register a `blob:` URL.
+   * openssl: `curl -fsS URL | openssl dgst -sha384 -binary | openssl base64 -A`
    * @see https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs
    */
-  const pdfWorkerUrl = "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
+  const PDF_WORKER_JS = {
+    url: "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs",
+    integrity: "sha384-QGrM6l+AboyGtbJadvQyoqHfn1ZWsw9wVXdUeqpGwaUGgXwageydCHusHcD4no2i"
+  };
   /** Tesseract: pinned 5.1.1; integrity must match this exact URL. */
   const TESSERACT_JS = {
     url: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
@@ -16,8 +20,45 @@
   const toolPagesUrl = "https://contrast.bdamokos.org/";
   const debugSampling = new URLSearchParams(window.location.search).has("debugSampling");
 
-  if (window.pdfjsLib) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  let pdfWorkerSriReady = null;
+
+  async function ensurePdfWorkerSri() {
+    if (!window.pdfjsLib) {
+      return;
+    }
+    if (pdfWorkerSriReady) {
+      return pdfWorkerSriReady;
+    }
+    pdfWorkerSriReady = (async () => {
+      const subtle = globalThis.crypto?.subtle;
+      if (!subtle) {
+        throw new Error("PDF support needs Web Crypto (use https:// or http://127.0.0.1).");
+      }
+      const { url, integrity } = PDF_WORKER_JS;
+      const expectedB64 = integrity.replace(/^sha384-/, "");
+      const response = await fetch(url, { mode: "cors", cache: "force-cache" });
+      if (!response.ok) {
+        throw new Error(`Could not load PDF.js worker (${response.status}).`);
+      }
+      const data = new Uint8Array(await response.arrayBuffer());
+      const digest = new Uint8Array(await subtle.digest("SHA-384", data));
+      let actualB64 = "";
+      for (let i = 0; i < digest.length; i += 1) {
+        actualB64 += String.fromCharCode(digest[i]);
+      }
+      actualB64 = btoa(actualB64);
+      if (actualB64 !== expectedB64) {
+        throw new Error("PDF.js worker did not pass integrity check. Refusing to start the worker.");
+      }
+      const workerBlob = new Blob([data], { type: "text/javascript" });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+    })();
+    try {
+      await pdfWorkerSriReady;
+    } catch (e) {
+      pdfWorkerSriReady = null;
+      throw e;
+    }
   }
 
   const state = {
@@ -1072,6 +1113,7 @@
    * (File.slice) so we do not buffer the entire document before the page picker.
    */
   async function openPdfDocumentForFile(file) {
+    await ensurePdfWorkerSri();
     const pdfjs = window.pdfjsLib;
     const size = typeof file.size === "number" && file.size > 0 ? file.size : 0;
     if (size === 0 || size <= PDF_FULL_READ_MAX_BYTES) {
