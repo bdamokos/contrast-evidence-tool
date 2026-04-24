@@ -2,6 +2,8 @@
   "use strict";
 
   const pdfWorkerUrl = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  /** Published site (GitHub Pages); update if the repo or username changes. */
+  const toolPagesUrl = "https://bdamokos.github.io/contrast-evidence-tool/";
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -1054,6 +1056,12 @@
     doc.text(`Generated ${new Date().toLocaleString()}`, page.margin, y);
     y += 6;
     doc.text(`${state.sources.length} sources | ${checks.length} checks | ${failing} AA normal failures`, page.margin, y);
+    y += 8;
+    doc.text("This report was generated with the colour checker tool at", page.margin, y);
+    y += 5;
+    doc.setTextColor(21, 87, 166);
+    doc.textWithLink(toolPagesUrl, page.margin, y, { url: toolPagesUrl });
+    doc.setTextColor(0, 0, 0);
     y += 10;
 
     for (const [sourceIndex, source] of state.sources.entries()) {
