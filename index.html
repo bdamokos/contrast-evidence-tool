@@ -243,11 +243,22 @@
       </article>
     </template>
 
+    <!-- Pinned jsdelivr SRI: update hashes if dependency URLs change. -->
+    <link
+      rel="modulepreload"
+      href="https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.min.mjs"
+      integrity="sha384-6zU5bB1wEqUZzeK01BDZ2dc5AOrAbcMxbx0gu7x6eWz9+hNR0VYhfWaI/AkN+F++"
+      crossorigin="anonymous"
+    />
     <script type="module">
       import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.min.mjs";
       window.pdfjsLib = pdfjsLib;
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script type="module" src="app.js?v=text-block-detection-20260424"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+      integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
+      crossorigin="anonymous"
+    ></script>
+    <script type="module" src="app.js?v=pinned-cdn-20260424"></script>
   </body>
 </html>

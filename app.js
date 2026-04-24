@@ -1,7 +1,17 @@
 (function () {
   "use strict";
 
+  /**
+   * Same version as index.html (pdf.mjs + modulepreload SRI). Worker fetches are not
+   * SRI-wrapped; pinning the exact jsdelivr file limits drift.
+   * @see https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs
+   */
   const pdfWorkerUrl = "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
+  /** Tesseract: pinned 5.1.1; integrity must match this exact URL. */
+  const TESSERACT_JS = {
+    url: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+    integrity: "sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F"
+  };
   /** Published site (GitHub Pages); update if the repo or username changes. */
   const toolPagesUrl = "https://contrast.bdamokos.org/";
   const debugSampling = new URLSearchParams(window.location.search).has("debugSampling");
@@ -2389,7 +2399,9 @@
     if (ocrEnginePromise) return ocrEnginePromise;
     ocrEnginePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.src = TESSERACT_JS.url;
+      script.integrity = TESSERACT_JS.integrity;
+      script.crossOrigin = "anonymous";
       script.async = true;
       script.onload = () => {
         if (window.Tesseract) {
