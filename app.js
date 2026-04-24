@@ -14,6 +14,10 @@
     draftRect: null,
     dragStart: null,
     displayRect: null,
+    editorScale: 1,
+    editorFitScale: 1,
+    editorDisplayRect: null,
+    suppressOpenClick: false,
     pendingPdf: null
   };
 
@@ -36,11 +40,24 @@
     pdfDialog: document.querySelector("#pdfDialog"),
     pdfDialogMeta: document.querySelector("#pdfDialogMeta"),
     pdfPageControls: document.querySelector("#pdfPageControls"),
-    importPdfPagesButton: document.querySelector("#importPdfPagesButton")
+    importPdfPagesButton: document.querySelector("#importPdfPagesButton"),
+    editorDialog: document.querySelector("#editorDialog"),
+    editorTitle: document.querySelector("#editorTitle"),
+    editorStage: document.querySelector("#editorStage"),
+    editorCanvasWrap: document.querySelector("#editorCanvasWrap"),
+    editorImageCanvas: document.querySelector("#editorImageCanvas"),
+    editorOverlayCanvas: document.querySelector("#editorOverlayCanvas"),
+    zoomOutButton: document.querySelector("#zoomOutButton"),
+    zoomInButton: document.querySelector("#zoomInButton"),
+    zoomFitButton: document.querySelector("#zoomFitButton"),
+    zoomLabel: document.querySelector("#zoomLabel"),
+    closeEditorButton: document.querySelector("#closeEditorButton")
   };
 
   const imageCtx = els.imageCanvas.getContext("2d", { willReadFrequently: true });
   const overlayCtx = els.overlayCanvas.getContext("2d");
+  const editorImageCtx = els.editorImageCanvas.getContext("2d", { willReadFrequently: true });
+  const editorOverlayCtx = els.editorOverlayCanvas.getContext("2d");
 
   function uid(prefix) {
     return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -130,10 +147,10 @@
       overlayCtx.save();
       overlayCtx.lineWidth = isActive ? 3 : 2;
       overlayCtx.strokeStyle = isActive ? "#ffe45c" : "#1557a6";
-      overlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.18)" : "rgba(21, 87, 166, 0.13)";
+      overlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.08)" : "rgba(21, 87, 166, 0.06)";
       overlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      drawNumberBadge(overlayCtx, index + 1, rect.x, rect.y);
+      drawNumberBadge(overlayCtx, index + 1, rect, bounds);
       overlayCtx.restore();
     });
 
@@ -143,25 +160,39 @@
       overlayCtx.setLineDash([7, 5]);
       overlayCtx.lineWidth = 2;
       overlayCtx.strokeStyle = "#0b3367";
-      overlayCtx.fillStyle = "rgba(255, 228, 92, 0.16)";
+      overlayCtx.fillStyle = "rgba(255, 228, 92, 0.04)";
       overlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.restore();
     }
   }
 
-  function drawNumberBadge(ctx, number, x, y) {
+  function drawNumberBadge(ctx, number, rect, bounds) {
     const label = String(number);
     const width = Math.max(24, label.length * 10 + 14);
-    const bx = Math.max(4, x + 4);
-    const by = Math.max(4, y + 4);
+    const height = 24;
+    const gap = 6;
+    const positions = [
+      { x: rect.x, y: rect.y - height - gap },
+      { x: rect.x + rect.width + gap, y: rect.y },
+      { x: rect.x, y: rect.y + rect.height + gap },
+      { x: rect.x - width - gap, y: rect.y }
+    ];
+    const chosen = positions.find((pos) => (
+      pos.x >= 4 &&
+      pos.y >= 4 &&
+      pos.x + width <= bounds.width - 4 &&
+      pos.y + height <= bounds.height - 4
+    )) || positions[0];
+    const bx = clamp(chosen.x, 4, Math.max(4, bounds.width - width - 4));
+    const by = clamp(chosen.y, 4, Math.max(4, bounds.height - height - 4));
     ctx.fillStyle = "#1557a6";
-    ctx.fillRect(bx, by, width, 24);
+    ctx.fillRect(bx, by, width, height);
     ctx.fillStyle = "#fff";
     ctx.font = "800 13px Avenir Next, Segoe UI, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(label, bx + width / 2, by + 12);
+    ctx.fillText(label, bx + width / 2, by + height / 2);
   }
 
   function renderSources() {
@@ -292,29 +323,35 @@
     els.deleteSourceButton.disabled = !activeSource();
   }
 
-  function displayPointToSource(event) {
-    if (!state.displayRect) return null;
-    const canvasRect = els.overlayCanvas.getBoundingClientRect();
+  function displayPointToSource(event, target = "main") {
+    const displayRect = target === "editor" ? state.editorDisplayRect : state.displayRect;
+    const canvas = target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas;
+    if (!displayRect) return null;
+    const canvasRect = canvas.getBoundingClientRect();
     const x = event.clientX - canvasRect.left;
     const y = event.clientY - canvasRect.top;
     const within =
-      x >= state.displayRect.x &&
-      y >= state.displayRect.y &&
-      x <= state.displayRect.x + state.displayRect.width &&
-      y <= state.displayRect.y + state.displayRect.height;
+      x >= displayRect.x &&
+      y >= displayRect.y &&
+      x <= displayRect.x + displayRect.width &&
+      y <= displayRect.y + displayRect.height;
     if (!within) return null;
     return {
-      x: (x - state.displayRect.x) / state.displayRect.scale,
-      y: (y - state.displayRect.y) / state.displayRect.scale
+      x: (x - displayRect.x) / displayRect.scale,
+      y: (y - displayRect.y) / displayRect.scale
     };
   }
 
   function sourceToDisplayRect(rect) {
+    return sourceRectToDisplay(rect, state.displayRect);
+  }
+
+  function sourceRectToDisplay(rect, displayRect) {
     return {
-      x: state.displayRect.x + rect.x * state.displayRect.scale,
-      y: state.displayRect.y + rect.y * state.displayRect.scale,
-      width: rect.width * state.displayRect.scale,
-      height: rect.height * state.displayRect.scale
+      x: displayRect.x + rect.x * displayRect.scale,
+      y: displayRect.y + rect.y * displayRect.scale,
+      width: rect.width * displayRect.scale,
+      height: rect.height * displayRect.scale
     };
   }
 
@@ -340,10 +377,10 @@
     ));
   }
 
-  function onPointerDown(event) {
+  function onPointerDown(event, target = "main") {
     const source = activeSource();
     if (!source) return;
-    const point = displayPointToSource(event);
+    const point = displayPointToSource(event, target);
     if (!point) return;
 
     const hit = findCheckAtPoint(source, point);
@@ -355,36 +392,149 @@
 
     state.dragStart = point;
     state.draftRect = normalizeRect(point, point, source);
-    els.overlayCanvas.setPointerCapture(event.pointerId);
-    drawOverlay();
+    (target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas).setPointerCapture(event.pointerId);
+    drawTargetOverlay(target);
   }
 
-  function onPointerMove(event) {
+  function onPointerMove(event, target = "main") {
     const source = activeSource();
     if (!source || !state.dragStart) return;
-    const point = displayPointToSource(event);
+    const point = displayPointToSource(event, target);
     if (!point) return;
     state.draftRect = normalizeRect(state.dragStart, point, source);
-    drawOverlay();
+    drawTargetOverlay(target);
   }
 
-  function onPointerUp(event) {
+  function onPointerUp(event, target = "main") {
     const source = activeSource();
     if (!source || !state.dragStart || !state.draftRect) return;
-    els.overlayCanvas.releasePointerCapture(event.pointerId);
+    (target === "editor" ? els.editorOverlayCanvas : els.overlayCanvas).releasePointerCapture(event.pointerId);
     const rect = state.draftRect;
     state.dragStart = null;
     state.draftRect = null;
 
     if (rect.width < 4 || rect.height < 4) {
-      drawOverlay();
+      drawTargetOverlay(target);
       return;
+    }
+
+    if (target === "main") {
+      state.suppressOpenClick = true;
+      setTimeout(() => {
+        state.suppressOpenClick = false;
+      }, 0);
     }
 
     const check = createCheck(source, rect);
     source.checks.push(check);
     state.activeCheckId = check.id;
     render();
+    if (els.editorDialog.open) renderEditor();
+  }
+
+  function drawTargetOverlay(target) {
+    if (target === "editor") {
+      drawEditorOverlay();
+    } else {
+      drawOverlay();
+    }
+  }
+
+  function openEditor() {
+    const source = activeSource();
+    if (!source) return;
+    state.dragStart = null;
+    state.draftRect = null;
+    state.editorScale = 0;
+    els.editorDialog.showModal();
+    requestAnimationFrame(() => {
+      setEditorFitScale();
+      renderEditor();
+    });
+  }
+
+  function closeEditor() {
+    state.dragStart = null;
+    state.draftRect = null;
+    els.editorDialog.close();
+    render();
+  }
+
+  function setEditorFitScale() {
+    const source = activeSource();
+    if (!source) return;
+    const stage = els.editorStage.getBoundingClientRect();
+    const availableWidth = Math.max(320, stage.width - 48);
+    const availableHeight = Math.max(240, stage.height - 48);
+    state.editorFitScale = Math.min(1, availableWidth / source.width, availableHeight / source.height);
+    state.editorScale = state.editorFitScale;
+  }
+
+  function renderEditor() {
+    const source = activeSource();
+    if (!source || !els.editorDialog.open) return;
+    const scale = state.editorScale || state.editorFitScale || 1;
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    const dpr = window.devicePixelRatio || 1;
+
+    els.editorTitle.textContent = source.name;
+    els.zoomLabel.textContent = `${Math.round(scale * 100)}%`;
+    els.editorCanvasWrap.style.width = `${width}px`;
+    els.editorCanvasWrap.style.height = `${height}px`;
+
+    for (const canvas of [els.editorImageCanvas, els.editorOverlayCanvas]) {
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    }
+
+    editorImageCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    editorOverlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    editorImageCtx.clearRect(0, 0, width, height);
+    editorImageCtx.drawImage(source.canvas, 0, 0, width, height);
+    state.editorDisplayRect = { x: 0, y: 0, width, height, scale };
+    drawEditorOverlay();
+  }
+
+  function drawEditorOverlay() {
+    const source = activeSource();
+    if (!source || !state.editorDisplayRect) return;
+    const bounds = { width: state.editorDisplayRect.width, height: state.editorDisplayRect.height };
+    editorOverlayCtx.clearRect(0, 0, bounds.width, bounds.height);
+    source.checks.forEach((check, index) => {
+      const rect = sourceRectToDisplay(check.rect, state.editorDisplayRect);
+      const isActive = check.id === state.activeCheckId;
+      editorOverlayCtx.save();
+      editorOverlayCtx.lineWidth = isActive ? 3 : 2;
+      editorOverlayCtx.strokeStyle = isActive ? "#ffe45c" : "#4fa3ff";
+      editorOverlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.07)" : "rgba(79, 163, 255, 0.05)";
+      editorOverlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      editorOverlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      drawNumberBadge(editorOverlayCtx, index + 1, rect, bounds);
+      editorOverlayCtx.restore();
+    });
+
+    if (state.draftRect) {
+      const rect = sourceRectToDisplay(state.draftRect, state.editorDisplayRect);
+      editorOverlayCtx.save();
+      editorOverlayCtx.setLineDash([8, 6]);
+      editorOverlayCtx.lineWidth = 2;
+      editorOverlayCtx.strokeStyle = "#ffe45c";
+      editorOverlayCtx.fillStyle = "rgba(255, 228, 92, 0.03)";
+      editorOverlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      editorOverlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      editorOverlayCtx.restore();
+    }
+  }
+
+  function zoomEditor(multiplier) {
+    const source = activeSource();
+    if (!source) return;
+    const current = state.editorScale || state.editorFitScale || 1;
+    state.editorScale = clamp(current * multiplier, Math.max(0.1, state.editorFitScale * 0.5), 4);
+    renderEditor();
   }
 
   async function handleFiles(files) {
@@ -770,10 +920,35 @@
   els.overlayCanvas.addEventListener("pointerdown", onPointerDown);
   els.overlayCanvas.addEventListener("pointermove", onPointerMove);
   els.overlayCanvas.addEventListener("pointerup", onPointerUp);
+  els.overlayCanvas.addEventListener("click", () => {
+    if (state.suppressOpenClick) return;
+    if (!state.dragStart && !state.draftRect) openEditor();
+  });
   els.overlayCanvas.addEventListener("pointercancel", () => {
     state.dragStart = null;
     state.draftRect = null;
     drawOverlay();
+  });
+
+  els.editorOverlayCanvas.addEventListener("pointerdown", (event) => onPointerDown(event, "editor"));
+  els.editorOverlayCanvas.addEventListener("pointermove", (event) => onPointerMove(event, "editor"));
+  els.editorOverlayCanvas.addEventListener("pointerup", (event) => onPointerUp(event, "editor"));
+  els.editorOverlayCanvas.addEventListener("pointercancel", () => {
+    state.dragStart = null;
+    state.draftRect = null;
+    drawEditorOverlay();
+  });
+  els.zoomOutButton.addEventListener("click", () => zoomEditor(0.8));
+  els.zoomInButton.addEventListener("click", () => zoomEditor(1.25));
+  els.zoomFitButton.addEventListener("click", () => {
+    setEditorFitScale();
+    renderEditor();
+  });
+  els.closeEditorButton.addEventListener("click", closeEditor);
+  els.editorDialog.addEventListener("close", () => {
+    state.dragStart = null;
+    state.draftRect = null;
+    render();
   });
 
   els.importPdfPagesButton.addEventListener("click", importPendingPdfPages);
@@ -793,7 +968,13 @@
     render();
   });
 
-  window.addEventListener("resize", render);
+  window.addEventListener("resize", () => {
+    render();
+    if (els.editorDialog.open) {
+      setEditorFitScale();
+      renderEditor();
+    }
+  });
   new ResizeObserver(render).observe(els.dropZone);
   render();
 })();

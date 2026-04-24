@@ -51,9 +51,9 @@
             <canvas id="overlayCanvas" aria-label="Selection overlay"></canvas>
           </div>
           <div class="hint">
-            <span>Drag to mark text</span>
+            <span>Click the screenshot to mark full screen</span>
+            <span>Drag still works here for quick checks</span>
             <span>Click a rectangle or result to select</span>
-            
           </div>
         </section>
 
@@ -77,6 +77,30 @@
           <button id="importPdfPagesButton" class="button primary" value="default">Import selected pages</button>
         </menu>
       </form>
+    </dialog>
+
+    <dialog id="editorDialog" class="editorDialog">
+      <div class="editorShell">
+        <header class="editorTopbar">
+          <div>
+            <p class="eyebrow">Full-screen marker</p>
+            <h2 id="editorTitle">No source selected</h2>
+          </div>
+          <div class="editorControls">
+            <button id="zoomOutButton" class="button ghost" type="button">-</button>
+            <output id="zoomLabel">Fit</output>
+            <button id="zoomInButton" class="button ghost" type="button">+</button>
+            <button id="zoomFitButton" class="button ghost" type="button">Fit</button>
+            <button id="closeEditorButton" class="button primary" type="button">Done</button>
+          </div>
+        </header>
+        <div id="editorStage" class="editorStage">
+          <div id="editorCanvasWrap" class="editorCanvasWrap">
+            <canvas id="editorImageCanvas"></canvas>
+            <canvas id="editorOverlayCanvas" aria-label="Full-screen selection overlay"></canvas>
+          </div>
+        </div>
+      </div>
     </dialog>
 
     <template id="sourceTemplate">
