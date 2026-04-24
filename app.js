@@ -64,6 +64,9 @@
     pdfDialogMeta: document.querySelector("#pdfDialogMeta"),
     pdfPageControls: document.querySelector("#pdfPageControls"),
     importPdfPagesButton: document.querySelector("#importPdfPagesButton"),
+    pdfImportStatus: document.querySelector("#pdfImportStatus"),
+    pdfImportStatusText: document.querySelector("#pdfImportStatusText"),
+    pdfImportCancelButton: document.querySelector("#pdfImportCancelButton"),
     editorDialog: document.querySelector("#editorDialog"),
     editorTitle: document.querySelector("#editorTitle"),
     editorStage: document.querySelector("#editorStage"),
@@ -778,10 +781,27 @@
       <label>Start page<input id="pdfStartPage" type="number" min="1" max="${pdf.numPages}" value="1"></label>
       <label>End page<input id="pdfEndPage" type="number" min="1" max="${pdf.numPages}" value="${pdf.numPages}"></label>
     `;
+    els.pdfImportStatus.hidden = true;
+    els.pdfImportStatusText.textContent = "";
+    els.importPdfPagesButton.disabled = false;
+    els.pdfImportCancelButton.disabled = false;
     els.pdfDialog.showModal();
     await new Promise((resolve) => {
       els.pdfDialog.addEventListener("close", resolve, { once: true });
     });
+  }
+
+  function yieldPdfImportUi() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  async function setPdfImportStatus(message) {
+    els.pdfImportStatusText.textContent = message;
+    await yieldPdfImportUi();
   }
 
   async function importPendingPdfPages(event) {
@@ -792,29 +812,50 @@
     const pdf = state.pendingPdf.pdf;
     const start = clamp(Number(startInput.value) || 1, 1, pdf.numPages);
     const end = clamp(Number(endInput.value) || start, start, pdf.numPages);
+    const totalSelected = end - start + 1;
+
     els.importPdfPagesButton.disabled = true;
+    els.pdfImportCancelButton.disabled = true;
+    els.pdfImportStatus.hidden = false;
+    els.pdfDialog.setAttribute("aria-busy", "true");
 
-    for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 2 });
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      addSource({
-        name: `${state.pendingPdf.file.name} - page ${pageNumber}`,
-        type: "pdf page",
-        width: canvas.width,
-        height: canvas.height,
-        canvas
-      });
+    try {
+      await setPdfImportStatus("Working in the background — preparing pages…");
+      let done = 0;
+      for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+        done += 1;
+        await setPdfImportStatus(
+          `Working in the background — rendering page ${pageNumber} (${done} of ${totalSelected}). The dialog may look idle; import is still running.`
+        );
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2 });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        addSource({
+          name: `${state.pendingPdf.file.name} - page ${pageNumber}`,
+          type: "pdf page",
+          width: canvas.width,
+          height: canvas.height,
+          canvas
+        });
+      }
+      await setPdfImportStatus("Finishing up…");
+      state.pendingPdf = null;
+      els.pdfDialog.close("imported");
+      render();
+    } catch (err) {
+      console.error(err);
+      alert(`Could not import PDF pages. ${err && err.message ? err.message : "Unknown error."}`);
+    } finally {
+      els.pdfImportStatus.hidden = true;
+      els.pdfImportStatusText.textContent = "";
+      els.importPdfPagesButton.disabled = false;
+      els.pdfImportCancelButton.disabled = false;
+      els.pdfDialog.removeAttribute("aria-busy");
     }
-
-    els.importPdfPagesButton.disabled = false;
-    state.pendingPdf = null;
-    els.pdfDialog.close("imported");
-    render();
   }
 
   function createCheck(source, rect) {
@@ -933,9 +974,15 @@
   }
 
   function parseHex(value) {
-    const match = String(value).trim().match(/^#?([0-9a-f]{6})$/i);
+    const match = String(value).trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
     if (!match) return null;
-    const hex = match[1];
+    let hex = match[1].toLowerCase();
+    if (hex.length === 3) {
+      hex = hex
+        .split("")
+        .map((c) => c + c)
+        .join("");
+    }
     return [
       parseInt(hex.slice(0, 2), 16),
       parseInt(hex.slice(2, 4), 16),
@@ -1000,7 +1047,7 @@
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
-    doc.text("Contrast Evidence Report", page.margin, y);
+    doc.text("Contrast Check Report", page.margin, y);
     y += 8;
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
@@ -1038,7 +1085,7 @@
       y += 8;
     }
 
-    doc.save(`contrast-evidence-${dateStamp()}.pdf`);
+    doc.save(`contrast-check-${dateStamp()}.pdf`);
   }
 
   function drawTableHeader(doc, page, y) {

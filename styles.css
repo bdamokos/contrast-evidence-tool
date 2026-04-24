@@ -738,6 +738,46 @@ dd {
   color: var(--ink);
 }
 
+.pdfImportStatus {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 193, 7, 0.12);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.pdfImportStatus[hidden] {
+  display: none !important;
+}
+
+.pdfImportStatus__spinner {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--line);
+  border-top-color: var(--yellow);
+  border-radius: 50%;
+  animation: pdfImportSpin 0.7s linear infinite;
+}
+
+.pdfImportStatus__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@keyframes pdfImportSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 menu {
   display: flex;
   justify-content: end;
