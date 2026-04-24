@@ -2399,10 +2399,10 @@
     if (ocrEnginePromise) return ocrEnginePromise;
     ocrEnginePromise = new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = TESSERACT_JS.url;
       script.integrity = TESSERACT_JS.integrity;
       script.crossOrigin = "anonymous";
       script.async = true;
+      script.src = TESSERACT_JS.url;
       script.onload = () => {
         if (window.Tesseract) {
           resolve(window.Tesseract);
