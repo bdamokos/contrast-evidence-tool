@@ -4,7 +4,7 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 const { test, expect } = require("@playwright/test");
 
-const fixtureDir = path.join(os.tmpdir(), "contrast-evidence-fixtures");
+const fixtureDir = path.join(os.tmpdir(), "contrast-check-fixtures");
 const pngPath = path.join(fixtureDir, "contrast-sample.png");
 const pdfPath = path.join(fixtureDir, "contrast-sample.pdf");
 
@@ -26,7 +26,7 @@ test("uploads an image, marks checks, and exports a report", async ({ page }) =>
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#exportButton").click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/contrast-evidence-.*\.pdf/);
+  expect(download.suggestedFilename()).toMatch(/contrast-check-.*\.pdf/);
   const exportPath = path.join(fixtureDir, "single-check-report.pdf");
   await download.saveAs(exportPath);
   expect(countPdfPages(exportPath)).toBe(2);
@@ -70,6 +70,23 @@ test("sidebar native color pickers update their corresponding hex inputs", async
   await setNativeColor(page, ".bgColorInput", "#445566");
   await expect(page.locator(".bgInput")).toHaveValue("#445566");
   await expect(page.locator(".fgInput")).toHaveValue("#112233");
+});
+
+test("hex manual input accepts 3-digit shorthand", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+
+  await page.locator(".fgInput").fill("fff");
+  await page.locator(".fgInput").press("Tab");
+  await expect(page.locator(".fgInput")).toHaveValue("#FFFFFF");
+
+  await page.locator(".fgInput").fill("#f0a");
+  await page.locator(".fgInput").press("Tab");
+  await expect(page.locator(".fgInput")).toHaveValue("#FF00AA");
 });
 
 test("exports long check tables across PDF pages", async ({ page }) => {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Contrast Evidence Tool</title>
+    <title>Contrast Checker Tool</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -73,8 +73,19 @@
         <h2>Select PDF pages</h2>
         <p id="pdfDialogMeta"></p>
         <div id="pdfPageControls" class="pdfPageControls"></div>
+        <div
+          id="pdfImportStatus"
+          class="pdfImportStatus"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          hidden
+        >
+          <span class="pdfImportStatus__spinner" aria-hidden="true"></span>
+          <span id="pdfImportStatusText" class="pdfImportStatus__text"></span>
+        </div>
         <menu>
-          <button class="button ghost" value="cancel">Cancel</button>
+          <button id="pdfImportCancelButton" class="button ghost" value="cancel">Cancel</button>
           <button id="importPdfPagesButton" class="button primary" value="default">Import selected pages</button>
         </menu>
       </form>
