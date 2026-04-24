@@ -1,4 +1,4 @@
-# Contrast Checker Tool
+# Contrast Checker
 
 A static browser tool for reviewing text contrast in screenshots and design PDFs.
 
