@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Contrast Evidence Tool</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">WCAG evidence builder</p>
+          <h1>Contrast Evidence Tool</h1>
+        </div>
+        <div class="actions">
+          <label class="button primary">
+            <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple>
+            Add screenshots or PDFs
+          </label>
+          <button id="exportButton" class="button" type="button" disabled>Export PDF</button>
+          <button id="resetButton" class="button ghost" type="button" disabled>Reset</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="Contrast review workspace">
+        <aside class="sourcesPanel">
+          <div class="panelHeader">
+            <h2>Sources</h2>
+            <output id="sourceCount">0</output>
+          </div>
+          <div id="sourcesList" class="sourcesList"></div>
+        </aside>
+
+        <section class="canvasPanel" aria-label="Image marking area">
+          <div class="canvasToolbar">
+            <div>
+              <h2 id="activeSourceTitle">No source selected</h2>
+              <p id="activeSourceMeta">Upload an image or PDF page to begin.</p>
+            </div>
+            <div class="toolbarActions">
+              <button id="deleteSourceButton" class="iconButton" type="button" title="Delete active source" disabled>Delete</button>
+            </div>
+          </div>
+          <div id="dropZone" class="dropZone">
+            <div class="emptyState">
+              <strong>Drop screenshots or PDFs here</strong>
+              <span>Then drag rectangles tightly around text areas.</span>
+            </div>
+            <canvas id="imageCanvas"></canvas>
+            <canvas id="overlayCanvas" aria-label="Selection overlay"></canvas>
+          </div>
+          <div class="hint">
+            <span>Drag to mark text</span>
+            <span>Click a rectangle or result to select</span>
+            <span>Manual color overrides keep evidence honest</span>
+          </div>
+        </section>
+
+        <aside class="resultsPanel">
+          <div class="panelHeader">
+            <h2>Checks</h2>
+            <output id="status">No checks</output>
+          </div>
+          <div id="results" class="results" aria-live="polite"></div>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="pdfDialog" class="pdfDialog">
+      <form method="dialog">
+        <h2>Select PDF pages</h2>
+        <p id="pdfDialogMeta"></p>
+        <div id="pdfPageControls" class="pdfPageControls"></div>
+        <menu>
+          <button class="button ghost" value="cancel">Cancel</button>
+          <button id="importPdfPagesButton" class="button primary" value="default">Import selected pages</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <template id="sourceTemplate">
+      <article class="sourceCard">
+        <button class="sourceButton" type="button">
+          <span class="sourceName"></span>
+          <span class="sourceMeta"></span>
+        </button>
+      </article>
+    </template>
+
+    <template id="resultTemplate">
+      <article class="sampleCard">
+        <button class="deleteButton" type="button" title="Remove rectangle" aria-label="Remove rectangle">x</button>
+        <button class="sampleFocus" type="button">
+          <span class="sampleTitle"></span>
+          <span class="ratio"></span>
+        </button>
+        <label class="field">
+          <span>Label</span>
+          <input class="labelInput" type="text">
+        </label>
+        <div class="cropWrap">
+          <img class="cropPreview" alt="">
+        </div>
+        <dl class="metrics">
+          <div>
+            <dt>Foreground</dt>
+            <dd>
+              <span class="swatch fgSwatch"></span>
+              <input class="hexInput fgInput" type="text" maxlength="7" spellcheck="false">
+            </dd>
+          </div>
+          <div>
+            <dt>Background</dt>
+            <dd>
+              <span class="swatch bgSwatch"></span>
+              <input class="hexInput bgInput" type="text" maxlength="7" spellcheck="false">
+            </dd>
+          </div>
+        </dl>
+        <div class="badges">
+          <span class="badge aaNormal"></span>
+          <span class="badge aaLarge"></span>
+          <span class="badge aaaNormal"></span>
+        </div>
+      </article>
+    </template>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

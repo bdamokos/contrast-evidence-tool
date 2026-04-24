@@ -1,0 +1,524 @@
+:root {
+  --ink: #18212b;
+  --muted: #607080;
+  --paper: #f6f3ea;
+  --panel: #fffdf8;
+  --line: #d8d1c2;
+  --blue: #1557a6;
+  --blue-dark: #0b3367;
+  --yellow: #ffe45c;
+  --red: #b42318;
+  --green: #177245;
+  --shadow: 0 18px 45px rgba(26, 31, 38, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, rgba(21, 87, 166, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(21, 87, 166, 0.06) 1px, transparent 1px),
+    var(--paper);
+  background-size: 36px 36px;
+  color: var(--ink);
+  font-family: Avenir Next, Avenir, Segoe UI, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.shell {
+  width: min(1680px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(34px, 5vw, 68px);
+  line-height: 0.95;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.actions,
+.toolbarActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.button,
+.iconButton {
+  min-height: 44px;
+  border: 1px solid var(--blue-dark);
+  background: var(--panel);
+  color: var(--blue-dark);
+  padding: 10px 16px;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 rgba(11, 51, 103, 0.14);
+  font-weight: 800;
+}
+
+.button:hover:not(:disabled),
+.iconButton:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 rgba(11, 51, 103, 0.17);
+}
+
+.button:disabled,
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+
+.button input {
+  display: none;
+}
+
+.primary {
+  background: var(--blue);
+  color: #fff;
+}
+
+.ghost {
+  background: #fff;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 390px;
+  gap: 18px;
+  align-items: start;
+}
+
+.sourcesPanel,
+.canvasPanel,
+.resultsPanel {
+  background: rgba(255, 253, 248, 0.92);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.sourcesPanel,
+.resultsPanel {
+  min-height: 660px;
+  padding: 16px;
+}
+
+.canvasPanel {
+  padding: 12px;
+}
+
+.panelHeader,
+.canvasToolbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.canvasToolbar {
+  align-items: center;
+  border-bottom: 0;
+}
+
+#activeSourceMeta,
+#sourceCount,
+#status {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sourcesList,
+.results {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+}
+
+.sourceCard {
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.sourceCard.isActive {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.sourceButton {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sourceName {
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.sourceMeta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dropZone {
+  position: relative;
+  min-height: 660px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #ece8df;
+  border: 1px dashed #9ba8b6;
+}
+
+.dropZone.isDragging {
+  outline: 4px solid var(--yellow);
+  outline-offset: -8px;
+}
+
+.dropZone.hasImage {
+  display: block;
+}
+
+canvas {
+  display: block;
+}
+
+#imageCanvas,
+#overlayCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#overlayCanvas {
+  cursor: crosshair;
+}
+
+.emptyState {
+  text-align: center;
+  color: var(--muted);
+  display: grid;
+  gap: 8px;
+  padding: 24px;
+}
+
+.emptyState strong {
+  color: var(--ink);
+  font-size: 28px;
+}
+
+.dropZone.hasImage .emptyState {
+  display: none;
+}
+
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hint span {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 6px 9px;
+}
+
+.sampleCard {
+  position: relative;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.sampleCard.isActive {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.sampleFocus {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 42px 11px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sampleTitle,
+.ratio {
+  font-weight: 900;
+}
+
+.ratio {
+  color: var(--blue-dark);
+  white-space: nowrap;
+}
+
+.deleteButton {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+  margin: 0 12px 10px;
+}
+
+.field span,
+dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.field input,
+.hexInput {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fffdf8;
+  padding: 7px 8px;
+  color: var(--ink);
+}
+
+.cropWrap {
+  margin: 0 12px 12px;
+  border: 1px solid var(--line);
+  background: #f4f1e9;
+  min-height: 70px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.cropPreview {
+  max-width: 100%;
+  max-height: 120px;
+  image-rendering: auto;
+}
+
+.metrics {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 12px 12px;
+}
+
+.metrics div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+dd {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  display: inline-block;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding: 10px 12px 12px;
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 7px;
+  background: #f2f1eb;
+  color: var(--muted);
+}
+
+.badge.pass {
+  background: #e5f4ec;
+  color: var(--green);
+}
+
+.badge.fail {
+  background: #fde8e5;
+  color: var(--red);
+}
+
+.pdfDialog {
+  width: min(560px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 0;
+}
+
+.pdfDialog::backdrop {
+  background: rgba(24, 33, 43, 0.42);
+}
+
+.pdfDialog form {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.pdfDialog p {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.pdfPageControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pdfPageControls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.pdfPageControls input {
+  border: 1px solid var(--line);
+  padding: 9px 10px;
+  color: var(--ink);
+}
+
+menu {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .resultsPanel {
+    grid-column: 1 / -1;
+    min-height: 0;
+  }
+
+  .results {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .shell {
+    width: min(100vw - 20px, 1680px);
+    padding-top: 12px;
+  }
+
+  .topbar,
+  .canvasToolbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .actions,
+  .button {
+    width: 100%;
+  }
+
+  .button {
+    text-align: center;
+  }
+
+  .sourcesPanel,
+  .resultsPanel,
+  .dropZone {
+    min-height: 360px;
+  }
+}
