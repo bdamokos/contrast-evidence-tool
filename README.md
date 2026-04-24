@@ -39,13 +39,7 @@ This is intentionally a browser smoke test, not a big unit-test suite:
 npm test
 ```
 
-## GitHub Pages
 
-This repository is configured to deploy to GitHub Pages with GitHub Actions.
-
-1. Push the `main` branch to GitHub.
-2. In the repository settings, open **Pages** and set **Source** to **GitHub Actions**.
-3. Every push to `main` will publish the site automatically.
 
 ## Notes on accuracy
 
