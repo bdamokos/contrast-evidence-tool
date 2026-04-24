@@ -5,6 +5,7 @@ A static browser tool for reviewing text contrast in screenshots and design PDFs
 ## What it does
 
 - Upload PNG, JPEG, WebP, or PDF files.
+- Paste screenshots from the clipboard with Ctrl/Cmd + V.
 - Render selected PDF pages into reviewable images.
 - Draw numbered rectangles around text regions.
 - Extract likely foreground and background colors from each rectangle.

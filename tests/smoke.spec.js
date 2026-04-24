@@ -32,6 +32,13 @@ test("uploads an image, marks checks, and exports a report", async ({ page }) =>
   expect(countPdfPages(exportPath)).toBe(2);
 });
 
+test("pastes a screenshot from clipboard as a source", async ({ page }) => {
+  await page.goto("/");
+  await pasteImageFromClipboard(page, pngPath, "contrast-sample.png", "image/png");
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+  await expect(page.locator("#activeSourceTitle")).toHaveText("contrast-sample.png");
+});
+
 test("opens an extracted snippet full screen for color picking", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(pngPath);
@@ -139,6 +146,21 @@ async function setNativeColor(page, selector, value) {
     input.value = nextValue;
     input.dispatchEvent(new Event("input", { bubbles: true }));
   }, value);
+}
+
+async function pasteImageFromClipboard(page, filePath, fileName, mimeType) {
+  const bytes = fs.readFileSync(filePath);
+  await page.evaluate(({ data, name, type }) => {
+    const array = Uint8Array.from(data);
+    const file = new File([array], name, { type });
+    const clipboardData = new DataTransfer();
+    clipboardData.items.add(file);
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: clipboardData
+    });
+    window.dispatchEvent(event);
+  }, { data: [...bytes], name: fileName, type: mimeType });
 }
 
 function countPdfPages(filePath) {

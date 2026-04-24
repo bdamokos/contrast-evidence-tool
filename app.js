@@ -744,6 +744,47 @@
     render();
   }
 
+  function isTypingTarget(target) {
+    if (!(target instanceof Element)) return false;
+    if (target.closest("textarea,[contenteditable=''],[contenteditable='true']")) return true;
+    const input = target.closest("input");
+    if (!input) return false;
+    if (!(input instanceof HTMLInputElement)) return false;
+    const nonTypingInputTypes = new Set(["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"]);
+    return !nonTypingInputTypes.has(input.type);
+  }
+
+  function clipboardImageFiles(event) {
+    const clipboard = event.clipboardData;
+    if (!clipboard) return [];
+    const files = [];
+
+    for (const item of clipboard.items || []) {
+      if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      files.push(file);
+    }
+
+    return files.map((file, index) => {
+      if (file.name) return file;
+      const extension = (file.type.split("/")[1] || "png").replace(/[^\w-]/g, "") || "png";
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      return new File([file], `screenshot-${stamp}-${index + 1}.${extension}`, {
+        type: file.type || `image/${extension}`,
+        lastModified: Date.now()
+      });
+    });
+  }
+
+  async function onPaste(event) {
+    if (isTypingTarget(event.target)) return;
+    const images = clipboardImageFiles(event);
+    if (!images.length) return;
+    event.preventDefault();
+    await handleFiles(images);
+  }
+
   async function addImageSource(file) {
     const bitmap = await createImageBitmap(file);
     const canvas = document.createElement("canvas");
@@ -1265,6 +1306,7 @@
     state.activeCheckId = activeSource()?.checks[0]?.id || null;
     render();
   });
+  window.addEventListener("paste", onPaste);
 
   window.addEventListener("resize", () => {
     render();
