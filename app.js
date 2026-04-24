@@ -4,6 +4,7 @@
   const pdfWorkerUrl = "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
   /** Published site (GitHub Pages); update if the repo or username changes. */
   const toolPagesUrl = "https://contrast.bdamokos.org/";
+  const debugSampling = new URLSearchParams(window.location.search).has("debugSampling");
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -49,6 +50,7 @@
     fileInput: document.querySelector("#fileInput"),
     exportButton: document.querySelector("#exportButton"),
     resetButton: document.querySelector("#resetButton"),
+    detectTextButton: document.querySelector("#detectTextButton"),
     openEditorButton: document.querySelector("#openEditorButton"),
     deleteSourceButton: document.querySelector("#deleteSourceButton"),
     sourceCount: document.querySelector("#sourceCount"),
@@ -169,7 +171,10 @@
 
     els.dropZone.classList.add("hasImage");
     els.activeSourceTitle.textContent = source.name;
-    els.activeSourceMeta.textContent = `${source.width} x ${source.height}px | ${source.checks.length} checks`;
+    const analysisLabel = source.analysis
+      ? ` | ${source.analysis.blocks.length} text blocks`
+      : "";
+    els.activeSourceMeta.textContent = `${source.width} x ${source.height}px | ${source.checks.length} checks${analysisLabel}`;
 
     state.displayRect = fitRect(source, bounds);
     imageCtx.drawImage(
@@ -316,6 +321,14 @@
       node.classList.toggle("isActive", check.id === state.activeCheckId);
       node.querySelector(".sampleTitle").textContent = `#${index + 1}`;
       node.querySelector(".ratio").textContent = `${formatRatio(check.ratio)}:1`;
+      const methodBadge = node.querySelector(".methodBadge");
+      const mismatchBadge = node.querySelector(".mismatchBadge");
+      methodBadge.textContent = sampleMethodLabel(check);
+      methodBadge.hidden = !debugSampling;
+      mismatchBadge.textContent = check.ocrRasterMismatch
+        ? "OCR colors differ from raster sample"
+        : "";
+      mismatchBadge.hidden = !check.ocrRasterMismatch;
 
       const labelInput = node.querySelector(".labelInput");
       labelInput.value = check.label;
@@ -442,6 +455,7 @@
     const hasChecks = state.sources.some((source) => source.checks.length > 0);
     els.exportButton.disabled = !hasChecks;
     els.resetButton.disabled = !hasSources;
+    els.detectTextButton.disabled = !activeSource();
     els.openEditorButton.disabled = !activeSource();
     els.deleteSourceButton.disabled = !activeSource();
   }
@@ -1016,12 +1030,22 @@
         canvas.height = Math.ceil(viewport.height);
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         await page.render({ canvasContext: ctx, viewport }).promise;
+        let analysis = null;
+        try {
+          await setPdfImportStatus(
+            `Working in the background — reading text on page ${pageNumber} (${done} of ${totalSelected}).`
+          );
+          analysis = await buildPdfPageAnalysis(page, viewport, canvas, pageNumber);
+        } catch (analysisErr) {
+          console.warn("PDF text analysis failed", analysisErr);
+        }
         addSource({
           name: `${state.pendingPdf.file.name} - page ${pageNumber}`,
           type: "pdf page",
           width: canvas.width,
           height: canvas.height,
-          canvas
+          canvas,
+          analysis
         });
       }
       await setPdfImportStatus("Finishing up…");
@@ -1043,7 +1067,7 @@
   }
 
   function createCheck(source, rect) {
-    const sample = sampleColors(source, rect);
+    const sample = sampleColorsForRect(source, rect);
     const cropDataUrl = cropData(source, rect);
     return {
       id: uid("check"),
@@ -1053,8 +1077,18 @@
       foreground: sample.foreground,
       background: sample.background,
       ratio: contrastRatio(sample.foreground, sample.background),
+      method: sample.method,
+      confidence: sample.confidence,
+      ocrRasterMismatch: sample.ocrRasterMismatch || null,
       pickTarget: "foreground"
     };
+  }
+
+  function sampleMethodLabel(check) {
+    const confidence = typeof check.confidence === "number" ? ` ${Math.round(check.confidence * 100)}%` : "";
+    if (check.method === "pdf-native") return `PDF-native${confidence}`;
+    if (check.method === "ocr-raster") return `OCR-guided${confidence}`;
+    return "Raster fallback";
   }
 
   function cropData(source, rect) {
@@ -1079,16 +1113,353 @@
     return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
   }
 
-  function sampleColors(source, rect) {
+  async function buildPdfPageAnalysis(page, viewport, canvas, pageNumber) {
+    const textItems = await extractPdfTextItems(page, viewport);
+    const blocks = detectTextBlocks(textItems);
+    sampleBlockBackgrounds(canvas, blocks);
+    return {
+      kind: "pdf-page-analysis",
+      version: 1,
+      pageNumber,
+      renderScale: viewport.scale || 1,
+      pageSize: { width: canvas.width, height: canvas.height },
+      blocks,
+      normalMap: buildNormalMap(blocks, canvas.width, canvas.height)
+    };
+  }
+
+  async function extractPdfTextItems(page, viewport) {
+    const content = await page.getTextContent({ disableCombineTextItems: false });
+    return content.items
+      .map((item, index) => pdfTextItemToBlockSeed(item, index, viewport))
+      .filter(Boolean);
+  }
+
+  function pdfTextItemToBlockSeed(item, index, viewport) {
+    const text = String(item.str || "").trim();
+    if (!text) return null;
+    const tx = window.pdfjsLib.Util.transform(viewport.transform, item.transform);
+    const fontHeight = Math.hypot(tx[2], tx[3]) || Math.abs(item.height * viewport.scale) || 1;
+    const width = Math.max(1, Math.abs(item.width * viewport.scale));
+    const height = Math.max(1, fontHeight);
+    const x = tx[4];
+    const y = tx[5] - height;
+    return {
+      id: `pdf-item-${index}`,
+      text,
+      rect: {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.ceil(width),
+        height: Math.ceil(height)
+      },
+      fontName: item.fontName,
+      fontSize: height,
+      direction: item.dir || "ltr",
+      foreground: {
+        rgb: [0, 0, 0],
+        source: "text-layer-inferred",
+        confidence: 0.55
+      },
+      confidence: 0.72
+    };
+  }
+
+  function detectTextBlocks(items) {
+    const sorted = items
+      .filter((item) => item.rect.width >= 3 && item.rect.height >= 3)
+      .sort((a, b) => (a.rect.y - b.rect.y) || (a.rect.x - b.rect.x));
+    const lines = [];
+
+    for (const item of sorted) {
+      const midY = item.rect.y + item.rect.height / 2;
+      const line = lines.find((candidate) => (
+        Math.abs(candidate.midY - midY) <= Math.max(candidate.height, item.rect.height) * 0.45 &&
+        candidate.direction === item.direction
+      ));
+      if (line) {
+        line.items.push(item);
+        line.midY = (line.midY * (line.items.length - 1) + midY) / line.items.length;
+        line.height = Math.max(line.height, item.rect.height);
+      } else {
+        lines.push({
+          midY,
+          height: item.rect.height,
+          direction: item.direction,
+          items: [item]
+        });
+      }
+    }
+
+    const lineBlocks = lines.flatMap((line) => splitLineIntoBlocks(line));
+    const paragraphBlocks = mergeLineBlocksIntoParagraphs(lineBlocks);
+    return paragraphBlocks.map((block, index) => ({
+      ...block,
+      id: `pdf-block-${index}`,
+      confidence: clamp(block.confidence, 0, 1)
+    }));
+  }
+
+  function splitLineIntoBlocks(line) {
+    const items = line.items.sort((a, b) => a.rect.x - b.rect.x);
+    const groups = [];
+    for (const item of items) {
+      const prevGroup = groups[groups.length - 1];
+      const prev = prevGroup?.items[prevGroup.items.length - 1];
+      const gap = prev ? item.rect.x - (prev.rect.x + prev.rect.width) : Infinity;
+      const styleMatches = !prev || prev.fontName === item.fontName;
+      const maxGap = Math.max(prev?.fontSize || item.fontSize || 12, item.fontSize || 12) * 0.7;
+      if (prevGroup && gap >= 0 && gap <= maxGap && styleMatches) {
+        prevGroup.items.push(item);
+      } else {
+        groups.push({ items: [item] });
+      }
+    }
+    return groups.map((group) => blockFromItems(group.items));
+  }
+
+  function mergeLineBlocksIntoParagraphs(lineBlocks) {
+    const blocks = [];
+    for (const line of lineBlocks.sort((a, b) => (a.rect.y - b.rect.y) || (a.rect.x - b.rect.x))) {
+      const previous = blocks[blocks.length - 1];
+      const yGap = previous ? line.rect.y - (previous.rect.y + previous.rect.height) : Infinity;
+      const fontSize = Math.max(previous?.fontSize || line.fontSize || 12, line.fontSize || 12);
+      const leftAligned = previous ? Math.abs(previous.rect.x - line.rect.x) <= fontSize * 0.9 : false;
+      const similarWidth = previous ? Math.abs(previous.rect.width - line.rect.width) <= Math.max(previous.rect.width, line.rect.width) * 0.45 : false;
+      const styleMatches = previous && previous.fontName === line.fontName && previous.direction === line.direction;
+      if (previous && yGap >= 0 && yGap <= fontSize * 1.35 && leftAligned && similarWidth && styleMatches) {
+        const merged = blockFromItems([...previous.items, ...line.items]);
+        Object.assign(previous, merged);
+      } else {
+        blocks.push({ ...line, items: [...line.items] });
+      }
+    }
+    return blocks.map(({ items, ...block }) => block);
+  }
+
+  function blockFromItems(items) {
+    const rect = unionRects(items.map((item) => item.rect));
+    const foreground = pickBlockForeground(items);
+    return {
+      text: items.map((item) => item.text).join(" ").replace(/\s+/g, " ").trim(),
+      rect,
+      fontName: items[0]?.fontName,
+      fontSize: Math.max(...items.map((item) => item.fontSize || item.rect.height)),
+      direction: items[0]?.direction || "ltr",
+      foreground,
+      confidence: Math.min(...items.map((item) => item.confidence ?? 0.5)),
+      items
+    };
+  }
+
+  function unionRects(rects) {
+    const x1 = Math.min(...rects.map((rect) => rect.x));
+    const y1 = Math.min(...rects.map((rect) => rect.y));
+    const x2 = Math.max(...rects.map((rect) => rect.x + rect.width));
+    const y2 = Math.max(...rects.map((rect) => rect.y + rect.height));
+    return {
+      x: Math.round(x1),
+      y: Math.round(y1),
+      width: Math.ceil(x2 - x1),
+      height: Math.ceil(y2 - y1)
+    };
+  }
+
+  function pickBlockForeground(items) {
+    const first = items.find((item) => item.foreground)?.foreground;
+    return first || {
+      rgb: [0, 0, 0],
+      source: "text-layer-inferred",
+      confidence: 0.45
+    };
+  }
+
+  function sampleBlockBackgrounds(canvas, blocks) {
+    const sourceLike = { canvas, width: canvas.width, height: canvas.height };
+    blocks.forEach((block) => {
+      const background = sampleBackgroundAroundRect(sourceLike, block.rect, block.foreground?.rgb);
+      block.background = {
+        rgb: background.rgb,
+        source: "background-raster",
+        confidence: background.confidence
+      };
+      block.confidence = Math.min(block.confidence, background.confidence, block.foreground?.confidence ?? 0.5);
+    });
+  }
+
+  function sampleBackgroundAroundRect(source, rect, foregroundRgb) {
+    const pad = Math.max(4, Math.round(Math.max(rect.width, rect.height) * 0.12));
+    const sampleRect = {
+      x: clamp(rect.x - pad, 0, source.width - 1),
+      y: clamp(rect.y - pad, 0, source.height - 1),
+      width: clamp(rect.width + pad * 2, 1, source.width),
+      height: clamp(rect.height + pad * 2, 1, source.height)
+    };
+    const colors = colorClustersForRect(source, sampleRect, (x, y) => {
+      const inTextBox =
+        x >= rect.x - 1 &&
+        y >= rect.y - 1 &&
+        x <= rect.x + rect.width + 1 &&
+        y <= rect.y + rect.height + 1;
+      return !inTextBox;
+    });
+    if (colors.length === 0) {
+      const fallback = sampleColors(source, rect);
+      return { rgb: fallback.background, confidence: 0.45 };
+    }
+    const candidate = foregroundRgb
+      ? colors
+          .map((cluster) => ({ ...cluster, contrast: contrastRatio(cluster.rgb, foregroundRgb) }))
+          .sort((a, b) => (b.count - a.count) || (b.contrast - a.contrast))[0]
+      : colors[0];
+    const total = colors.reduce((sum, cluster) => sum + cluster.count, 0);
+    return {
+      rgb: candidate.rgb,
+      confidence: clamp(candidate.count / Math.max(1, total), 0.35, 0.9)
+    };
+  }
+
+  function buildNormalMap(blocks, width, height, cellSize = 32) {
+    const columns = Math.max(1, Math.ceil(width / cellSize));
+    const rows = Math.max(1, Math.ceil(height / cellSize));
+    const cells = Array.from({ length: columns * rows }, () => []);
+    blocks.forEach((block, index) => {
+      const x0 = clamp(Math.floor(block.rect.x / cellSize), 0, columns - 1);
+      const y0 = clamp(Math.floor(block.rect.y / cellSize), 0, rows - 1);
+      const x1 = clamp(Math.floor((block.rect.x + block.rect.width) / cellSize), 0, columns - 1);
+      const y1 = clamp(Math.floor((block.rect.y + block.rect.height) / cellSize), 0, rows - 1);
+      for (let y = y0; y <= y1; y += 1) {
+        for (let x = x0; x <= x1; x += 1) {
+          cells[y * columns + x].push(index);
+        }
+      }
+    });
+    return { cellSize, columns, rows, cells };
+  }
+
+  function sampleColorsForRect(source, rect) {
+    const analysisSample = sampleColorsFromAnalysis(source, rect);
+    const rasterSample = sampleColors(source, rect);
+    if (analysisSample) {
+      return {
+        ...analysisSample,
+        ocrRasterMismatch: analysisSample.method === "ocr-raster"
+          ? ocrRasterMismatch(analysisSample, rasterSample)
+          : null
+      };
+    }
+    return { ...rasterSample, method: "raster-fallback", confidence: 0.5 };
+  }
+
+  function ocrRasterMismatch(ocrSample, rasterSample) {
+    const fgDistance = rgbDistance(ocrSample.foreground, rasterSample.foreground);
+    const bgDistance = rgbDistance(ocrSample.background, rasterSample.background);
+    const ocrRatio = contrastRatio(ocrSample.foreground, ocrSample.background);
+    const rasterRatio = contrastRatio(rasterSample.foreground, rasterSample.background);
+    const ratioDelta = Math.abs(ocrRatio - rasterRatio);
+    const mismatched = fgDistance >= 42 || bgDistance >= 42 || ratioDelta >= 1.25;
+    if (!mismatched) return null;
+    return {
+      rasterForeground: rasterSample.foreground,
+      rasterBackground: rasterSample.background,
+      rasterRatio,
+      fgDistance,
+      bgDistance,
+      ratioDelta
+    };
+  }
+
+  function rgbDistance(a, b) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  }
+
+  function sampleColorsFromAnalysis(source, rect) {
+    if (!source.analysis?.normalMap || !source.analysis.blocks?.length) return null;
+    const blocks = queryBlocksForRect(source.analysis, rect)
+      .map((block) => ({ block, score: blockRectOverlapScore(block.rect, rect) }))
+      .filter(({ score }) => score.strong)
+      .sort((a, b) => b.score.value - a.score.value);
+    if (!blocks.length) return null;
+    const selected = blocks.filter(({ score }, index) => index === 0 || score.blockCoverage >= 0.1);
+    const foreground = weightedAverageRgb(
+      selected.map(({ block, score }) => ({
+        rgb: block.foreground?.rgb,
+        weight: score.value * (block.foreground?.confidence ?? 0.5)
+      }))
+    );
+    const background = weightedAverageRgb(
+      selected.map(({ block, score }) => ({
+        rgb: block.background?.rgb,
+        weight: score.value * (block.background?.confidence ?? 0.5)
+      }))
+    );
+    if (!foreground || !background) return null;
+    const confidence = Math.min(...selected.map(({ block }) => block.confidence ?? 0.5));
+    if (confidence < 0.35) return null;
+    return {
+      foreground,
+      background,
+      method: source.analysis.kind === "pdf-page-analysis" ? "pdf-native" : "ocr-raster",
+      confidence
+    };
+  }
+
+  function queryBlocksForRect(analysis, rect) {
+    const map = analysis.normalMap;
+    const x0 = clamp(Math.floor(rect.x / map.cellSize), 0, map.columns - 1);
+    const y0 = clamp(Math.floor(rect.y / map.cellSize), 0, map.rows - 1);
+    const x1 = clamp(Math.floor((rect.x + rect.width) / map.cellSize), 0, map.columns - 1);
+    const y1 = clamp(Math.floor((rect.y + rect.height) / map.cellSize), 0, map.rows - 1);
+    const indexes = new Set();
+    for (let y = y0; y <= y1; y += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        for (const index of map.cells[y * map.columns + x]) indexes.add(index);
+      }
+    }
+    return [...indexes].map((index) => analysis.blocks[index]).filter(Boolean);
+  }
+
+  function blockRectOverlapScore(blockRect, rect) {
+    const overlap = intersectRects(blockRect, rect);
+    const overlapArea = overlap.width * overlap.height;
+    const blockArea = Math.max(1, blockRect.width * blockRect.height);
+    const rectArea = Math.max(1, rect.width * rect.height);
+    const blockCoverage = overlapArea / blockArea;
+    const rectCoverage = overlapArea / rectArea;
+    return {
+      blockCoverage,
+      rectCoverage,
+      strong: blockCoverage >= 0.35 || rectCoverage >= 0.35,
+      value: Math.max(blockCoverage, rectCoverage)
+    };
+  }
+
+  function weightedAverageRgb(items) {
+    const usable = items.filter((item) => item.rgb && item.weight > 0);
+    const total = usable.reduce((sum, item) => sum + item.weight, 0);
+    if (total <= 0) return null;
+    return [0, 1, 2].map((index) => (
+      Math.round(usable.reduce((sum, item) => sum + item.rgb[index] * item.weight, 0) / total)
+    ));
+  }
+
+  function colorClustersForRect(source, rect, includePixel = () => true) {
     const ctx = source.canvas.getContext("2d", { willReadFrequently: true });
-    const image = ctx.getImageData(rect.x, rect.y, rect.width, rect.height);
+    const x0 = clamp(Math.floor(rect.x), 0, Math.max(0, source.width - 1));
+    const y0 = clamp(Math.floor(rect.y), 0, Math.max(0, source.height - 1));
+    const x1 = clamp(Math.ceil(rect.x + rect.width), x0 + 1, source.width);
+    const y1 = clamp(Math.ceil(rect.y + rect.height), y0 + 1, source.height);
+    const width = x1 - x0;
+    const height = y1 - y0;
+    const image = ctx.getImageData(x0, y0, width, height);
     const clusters = new Map();
     const data = image.data;
-    const step = Math.max(1, Math.floor(Math.sqrt((rect.width * rect.height) / 18000)));
+    const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 18000)));
 
-    for (let y = 0; y < rect.height; y += step) {
-      for (let x = 0; x < rect.width; x += step) {
-        const i = (y * rect.width + x) * 4;
+    for (let y = 0; y < height; y += step) {
+      for (let x = 0; x < width; x += step) {
+        if (!includePixel(x0 + x, y0 + y)) continue;
+        const i = (y * width + x) * 4;
         const a = data[i + 3];
         if (a < 128) continue;
         const r = data[i];
@@ -1104,7 +1475,7 @@
       }
     }
 
-    const sorted = [...clusters.values()]
+    return [...clusters.values()]
       .map((cluster) => ({
         count: cluster.count,
         rgb: [
@@ -1114,6 +1485,10 @@
         ]
       }))
       .sort((a, b) => b.count - a.count);
+  }
+
+  function sampleColors(source, rect) {
+    const sorted = colorClustersForRect(source, rect);
 
     if (sorted.length === 0) {
       return { foreground: [0, 0, 0], background: [255, 255, 255] };
@@ -1708,6 +2083,15 @@
     drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, cx, y + 13);
     doc.setFont("helvetica", "bold");
     doc.text(`${formatRatio(check.ratio)}:1`, layout.ratio(page), y + 7);
+    if (debugSampling) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.text(sampleMethodLabel(check), layout.ratio(page), y + 13, { maxWidth: 28 });
+    } else if (check.ocrRasterMismatch) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.text("OCR/raster differ", layout.ratio(page), y + 13, { maxWidth: 28 });
+    }
     drawResultValue(doc, check, layout.result(page), y + 7);
     doc.setTextColor(0, 0, 0);
     return y + CHECK_ROW_HEIGHT;
@@ -1761,6 +2145,182 @@
       String(now.getMonth() + 1).padStart(2, "0"),
       String(now.getDate()).padStart(2, "0")
     ].join("-");
+  }
+
+  let ocrEnginePromise = null;
+
+  function loadOcrEngine() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (ocrEnginePromise) return ocrEnginePromise;
+    ocrEnginePromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+      script.async = true;
+      script.onload = () => {
+        if (window.Tesseract) {
+          resolve(window.Tesseract);
+        } else {
+          reject(new Error("Tesseract.js loaded without exposing an OCR engine."));
+        }
+      };
+      script.onerror = () => reject(new Error("Could not load Tesseract.js."));
+      document.head.append(script);
+    });
+    return ocrEnginePromise;
+  }
+
+  function prepareOcrCanvas(source) {
+    const maxPixels = 1800 * 1400;
+    const baseScale = source.width * source.height > maxPixels
+      ? Math.sqrt(maxPixels / (source.width * source.height))
+      : 1;
+    const upscale = Math.max(1, Math.min(2, 1000 / Math.max(1, Math.min(source.width, source.height))));
+    const scale = Math.min(2, baseScale * upscale);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(source.canvas, 0, 0, canvas.width, canvas.height);
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = image.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = Math.round(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
+      const boosted = clamp(Math.round((gray - 128) * 1.35 + 128), 0, 255);
+      data[i] = boosted;
+      data[i + 1] = boosted;
+      data[i + 2] = boosted;
+    }
+    ctx.putImageData(image, 0, 0);
+    return { canvas, scale };
+  }
+
+  async function buildOcrImageAnalysis(source, onProgress = () => {}) {
+    onProgress("Loading OCR…");
+    const Tesseract = await loadOcrEngine();
+    const prepared = prepareOcrCanvas(source);
+    onProgress("Recognizing text…");
+    const result = await Tesseract.recognize(prepared.canvas, "eng", {
+      logger(message) {
+        if (message.status === "recognizing text" && typeof message.progress === "number") {
+          onProgress(`Recognizing text ${Math.round(message.progress * 100)}%…`);
+        }
+      }
+    });
+    const words = (result.data.words || [])
+      .map((word, index) => ocrWordToBlockSeed(word, index, prepared.scale))
+      .filter(Boolean);
+    const blocks = mergeOcrBoxesIntoBlocks(words);
+    sampleOcrBlockColors(source.canvas, blocks);
+    return {
+      kind: "ocr-image-analysis",
+      version: 1,
+      engine: "tesseract.js",
+      language: "eng",
+      sourceScale: prepared.scale,
+      blocks,
+      normalMap: buildNormalMap(blocks, source.width, source.height)
+    };
+  }
+
+  function ocrWordToBlockSeed(word, index, scale) {
+    const text = String(word.text || "").trim();
+    const confidence = Number(word.confidence);
+    const bbox = word.bbox || {};
+    if (!text || !Number.isFinite(confidence) || confidence < 45) return null;
+    const x0 = Number(bbox.x0);
+    const y0 = Number(bbox.y0);
+    const x1 = Number(bbox.x1);
+    const y1 = Number(bbox.y1);
+    if (![x0, y0, x1, y1].every(Number.isFinite) || x1 <= x0 || y1 <= y0) return null;
+    return {
+      id: `ocr-word-${index}`,
+      text,
+      rect: {
+        x: Math.round(x0 / scale),
+        y: Math.round(y0 / scale),
+        width: Math.ceil((x1 - x0) / scale),
+        height: Math.ceil((y1 - y0) / scale)
+      },
+      direction: "ltr",
+      confidence: clamp(confidence / 100, 0, 1)
+    };
+  }
+
+  function mergeOcrBoxesIntoBlocks(words) {
+    const lineBlocks = detectTextBlocks(words);
+    return lineBlocks.map((block, index) => ({
+      ...block,
+      id: `ocr-block-${index}`,
+      confidence: Math.min(block.confidence ?? 0.5, 0.75)
+    }));
+  }
+
+  function sampleOcrBlockColors(canvas, blocks) {
+    const sourceLike = { canvas, width: canvas.width, height: canvas.height };
+    blocks.forEach((block) => {
+      const sample = sampleColors(sourceLike, block.rect);
+      block.foreground = {
+        rgb: sample.foreground,
+        source: "raster-fallback",
+        confidence: 0.55
+      };
+      block.background = {
+        rgb: sample.background,
+        source: "raster-fallback",
+        confidence: 0.55
+      };
+      block.confidence = Math.min(block.confidence ?? 0.5, 0.55);
+    });
+  }
+
+  async function detectTextBlocksForActiveSource() {
+    const source = activeSource();
+    if (!source) return;
+    if (!source.analysis?.blocks?.length) {
+      try {
+        els.detectTextButton.disabled = true;
+        els.detectTextButton.textContent = "Loading OCR";
+        source.analysis = await buildOcrImageAnalysis(source, (message) => {
+          els.detectTextButton.textContent = message.replace(/…$/, "");
+        });
+      } catch (err) {
+        console.error(err);
+        alert(`Text detection failed. ${err && err.message ? err.message : "You can still draw rectangles manually."}`);
+        els.detectTextButton.textContent = "Detect text blocks";
+        render();
+        return;
+      } finally {
+        els.detectTextButton.textContent = "Detect text blocks";
+      }
+    }
+    if (!source.analysis?.blocks?.length) {
+      alert("No text blocks were found. You can still draw rectangles manually.");
+      render();
+      return;
+    }
+
+    const existing = source.checks;
+    const candidates = source.analysis.blocks
+      .filter((block) => block.confidence >= 0.35 && block.rect.width >= 3 && block.rect.height >= 3)
+      .filter((block) => !existing.some((check) => blockRectOverlapScore(block.rect, check.rect).value >= 0.75))
+      .slice(0, 200);
+
+    for (const block of candidates) {
+      const rect = {
+        x: clamp(Math.round(block.rect.x), 0, source.width - 1),
+        y: clamp(Math.round(block.rect.y), 0, source.height - 1),
+        width: clamp(Math.round(block.rect.width), 1, source.width),
+        height: clamp(Math.round(block.rect.height), 1, source.height)
+      };
+      source.checks.push(createCheck(source, rect));
+    }
+
+    if (candidates.length) {
+      state.activeCheckId = source.checks[source.checks.length - candidates.length]?.id || source.checks[0]?.id || null;
+    }
+    render();
+    if (els.editorDialog.open) renderEditor();
   }
 
   els.fileInput.addEventListener("change", async (event) => {
@@ -1830,6 +2390,7 @@
   });
 
   els.importPdfPagesButton.addEventListener("click", importPendingPdfPages);
+  els.detectTextButton.addEventListener("click", detectTextBlocksForActiveSource);
   els.exportButton.addEventListener("click", exportReport);
   els.resetButton.addEventListener("click", () => {
     state.sources = [];

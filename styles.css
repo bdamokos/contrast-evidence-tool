@@ -399,6 +399,32 @@ canvas {
   white-space: nowrap;
 }
 
+.methodBadge,
+.mismatchBadge {
+  display: inline-flex;
+  width: fit-content;
+  margin: -4px 12px 10px;
+  border: 1px solid var(--line);
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.methodBadge {
+  background: #eef4fb;
+  color: var(--blue-dark);
+}
+
+.mismatchBadge {
+  background: #fff7d6;
+  color: #6d4b00;
+}
+
+.methodBadge[hidden],
+.mismatchBadge[hidden] {
+  display: none;
+}
+
 .deleteButton {
   position: absolute;
   top: 6px;

@@ -39,6 +39,7 @@
               <p id="activeSourceMeta">Upload an image or PDF page to begin.</p>
             </div>
             <div class="toolbarActions">
+              <button id="detectTextButton" class="iconButton" type="button" disabled>Detect text blocks</button>
               <button id="openEditorButton" class="iconButton primary" type="button" disabled>Open full screen</button>
               <button id="deleteSourceButton" class="iconButton" type="button" title="Delete active source" disabled>Delete</button>
             </div>
@@ -189,6 +190,8 @@
           <span class="sampleTitle"></span>
           <span class="ratio"></span>
         </button>
+        <div class="methodBadge"></div>
+        <div class="mismatchBadge"></div>
         <label class="field">
           <span>Label</span>
           <input class="labelInput" type="text">

@@ -130,6 +130,22 @@ test("imports a selected PDF page as a source", async ({ page }) => {
   await expect(page.locator(".sourceMeta")).toContainText("pdf page");
 });
 
+test("detects PDF-native text blocks and tags generated checks", async ({ page }) => {
+  await page.goto("/?debugSampling=1");
+  await page.locator("#fileInput").setInputFiles(pdfPath);
+  await expect(page.locator("#pdfDialog")).toBeVisible();
+  await page.locator("#importPdfPagesButton").click();
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+  await expect(page.locator("#activeSourceMeta")).toContainText("text blocks");
+
+  await page.locator("#detectTextButton").click();
+  await expect(page.locator(".sampleCard")).toHaveCount(2);
+  await expect(page.locator(".methodBadge").first()).toContainText("PDF-native");
+
+  await page.locator("#detectTextButton").click();
+  await expect(page.locator(".sampleCard")).toHaveCount(2);
+});
+
 async function drawCheck(page, rect = [190, 210, 640, 315]) {
   const canvas = page.locator("#overlayCanvas");
   const box = await canvas.boundingBox();
@@ -230,17 +246,24 @@ function crc32(buffer) {
 }
 
 function makePdfFixture() {
+  const text = [
+    "BT /F1 26 Tf 0 0 0 rg 100 388 Td (Black text on white) Tj ET",
+    "BT /F1 26 Tf 0 0 0 rg 100 328 Td (More dark text) Tj ET",
+    "BT /F1 22 Tf 0 0 0 rg 112 162 Td (Dark text on yellow) Tj ET"
+  ].join("\n");
   const stream = [
     "q 0.082 0.341 0.651 rg 0 0 900 520 re f Q",
     "q 1 1 1 rg 90 375 490 35 re f 90 315 410 35 re f 90 255 540 35 re f Q",
     "q 1 0.949 0 rg 70 80 650 125 re f Q",
-    "q 0 0.110 0.243 rg 100 155 510 25 re f 100 110 470 25 re f Q"
+    "q 0 0.110 0.243 rg 100 155 510 25 re f 100 110 470 25 re f Q",
+    text
   ].join("\n");
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 900 520] /Contents 4 0 R /Resources << >> >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 900 520] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
