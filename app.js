@@ -882,6 +882,52 @@
     await yieldPdfImportUi();
   }
 
+  /** Below this size we load the whole file at once (simpler, fast for small PDFs). */
+  const PDF_FULL_READ_MAX_BYTES = 1.5 * 1024 * 1024;
+
+  /**
+   * Opens a PDF for metadata and later page rendering. Large files use range reads
+   * (File.slice) so we do not buffer the entire document before the page picker.
+   */
+  async function openPdfDocumentForFile(file) {
+    const pdfjs = window.pdfjsLib;
+    const size = typeof file.size === "number" && file.size > 0 ? file.size : 0;
+    if (size === 0 || size <= PDF_FULL_READ_MAX_BYTES) {
+      const data = new Uint8Array(await file.arrayBuffer());
+      return pdfjs.getDocument({ data }).promise;
+    }
+
+    const rangeChunkSize = 2 ** 17;
+    const initialLen = Math.min(size, rangeChunkSize);
+    const initialData = new Uint8Array(await file.slice(0, initialLen).arrayBuffer());
+    const transport = new pdfjs.PDFDataRangeTransport(size, initialData);
+    transport.requestDataRange = (begin, end) => {
+      file
+        .slice(begin, end)
+        .arrayBuffer()
+        .then((buffer) => {
+          transport.onDataRange(begin, new Uint8Array(buffer));
+        })
+        .catch((err) => {
+          console.error(err);
+          transport.abort();
+        });
+    };
+
+    const loadingTask = pdfjs.getDocument({
+      range: transport,
+      disableStream: true,
+      disableAutoFetch: true,
+      rangeChunkSize
+    });
+    try {
+      return await loadingTask.promise;
+    } catch (err) {
+      await loadingTask.destroy();
+      throw err;
+    }
+  }
+
   async function choosePdfPages(file) {
     if (!window.pdfjsLib) {
       alert("PDF support did not load. Check your network connection and try again.");
@@ -891,12 +937,15 @@
       typeof file.size === "number" && file.size > 0
         ? ` (${file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`})`
         : "";
-    showPdfPreparing(`Reading file${sizeLabel}…`);
+    const largeHint =
+      typeof file.size === "number" && file.size > PDF_FULL_READ_MAX_BYTES
+        ? " — scanning structure (not loading the whole file yet)"
+        : "";
+    showPdfPreparing(`Opening PDF${sizeLabel}${largeHint}…`);
     await yieldPdfImportUi();
     try {
-      const bytes = await file.arrayBuffer();
-      await setPdfPreparingMessage("Parsing PDF — building page list…");
-      const pdf = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+      await setPdfPreparingMessage("Parsing PDF — resolving page count…");
+      const pdf = await openPdfDocumentForFile(file);
       state.pendingPdf = { file, pdf };
       els.pdfDialogMeta.textContent = `${file.name} has ${pdf.numPages} pages. Import one page or a range.`;
       els.pdfPageControls.innerHTML = `
@@ -912,6 +961,11 @@
       await new Promise((resolve) => {
         els.pdfDialog.addEventListener("close", resolve, { once: true });
       });
+      if (state.pendingPdf?.pdf) {
+        const { pdf } = state.pendingPdf;
+        state.pendingPdf = null;
+        pdf.destroy().catch(() => {});
+      }
     } catch (err) {
       console.error(err);
       hidePdfPreparing();
@@ -971,7 +1025,9 @@
         });
       }
       await setPdfImportStatus("Finishing up…");
+      const { pdf: openedPdf } = state.pendingPdf;
       state.pendingPdf = null;
+      await openedPdf.destroy().catch(() => {});
       els.pdfDialog.close("imported");
       render();
     } catch (err) {
