@@ -879,8 +879,8 @@
     doc.addImage(check.cropDataUrl, "PNG", page.margin + 12, y + 3, 30, 18);
     doc.setFont("helvetica", "normal");
     doc.text(check.label || `Check ${number}`, page.margin + 48, y + 7, { maxWidth: 48 });
-    doc.text(`FG ${rgbToHex(check.foreground)}`, page.margin + 100, y + 7);
-    doc.text(`BG ${rgbToHex(check.background)}`, page.margin + 100, y + 13);
+    drawColorValue(doc, `FG ${rgbToHex(check.foreground)}`, check.foreground, page.margin + 100, y + 7);
+    drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, page.margin + 100, y + 13);
     doc.setFont("helvetica", "bold");
     doc.text(`${formatRatio(check.ratio)}:1`, page.margin + 140, y + 7);
     doc.setTextColor(pass ? 23 : 180, pass ? 114 : 35, pass ? 69 : 24);
@@ -890,6 +890,17 @@
     doc.setFontSize(8);
     doc.text(`AA large ${check.ratio >= 3 ? "pass" : "fail"} | AAA ${check.ratio >= 7 ? "pass" : "fail"}`, page.margin + 160, y + 14);
     return y + rowHeight;
+  }
+
+  function drawColorValue(doc, label, color, x, y) {
+    const swatchRadius = 1.8;
+    const centerX = x + swatchRadius;
+    const centerY = y - 1.4;
+    const [r, g, b] = color;
+    doc.setDrawColor(160, 150, 132);
+    doc.setFillColor(r, g, b);
+    doc.circle(centerX, centerY, swatchRadius, "FD");
+    doc.text(label, x + 6, y);
   }
 
   function dateStamp() {
