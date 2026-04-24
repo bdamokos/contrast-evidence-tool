@@ -191,28 +191,35 @@
       const isActive = check.id === state.activeCheckId;
       overlayCtx.save();
       overlayCtx.lineWidth = isActive ? 3 : 2;
-      overlayCtx.strokeStyle = isActive ? "#ffe45c" : "#1557a6";
-      overlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.08)" : "rgba(21, 87, 166, 0.06)";
+      if (isActive) {
+        overlayCtx.strokeStyle = "#ffe45c";
+        overlayCtx.fillStyle = "rgba(255, 228, 92, 0.08)";
+      } else {
+        const { strokeRgb } = markingColorsForCheckRect(source, check.rect);
+        overlayCtx.strokeStyle = rgbToCss(strokeRgb);
+        overlayCtx.fillStyle = rgbaCss(strokeRgb, 0.06);
+      }
       overlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      drawNumberBadge(overlayCtx, index + 1, rect, bounds, source, state.displayRect);
+      drawNumberBadge(overlayCtx, index + 1, rect, bounds, source, state.displayRect, check.rect);
       overlayCtx.restore();
     });
 
     if (state.draftRect) {
       const rect = sourceToDisplayRect(state.draftRect);
+      const { strokeRgb } = markingColorsForCheckRect(source, state.draftRect);
       overlayCtx.save();
       overlayCtx.setLineDash([7, 5]);
       overlayCtx.lineWidth = 2;
-      overlayCtx.strokeStyle = "#0b3367";
-      overlayCtx.fillStyle = "rgba(255, 228, 92, 0.04)";
+      overlayCtx.strokeStyle = rgbToCss(strokeRgb);
+      overlayCtx.fillStyle = rgbaCss(strokeRgb, 0.04);
       overlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
       overlayCtx.restore();
     }
   }
 
-  function drawNumberBadge(ctx, number, rect, bounds, source, displayRect) {
+  function drawNumberBadge(ctx, number, rect, bounds, source, displayRect, checkRectSource) {
     const label = String(number);
     const width = Math.max(24, label.length * 10 + 14);
     const height = 24;
@@ -234,15 +241,17 @@
 
     let fillRgb = BADGE_FILL_CANDIDATES[0];
     let textRgb = [255, 255, 255];
-    if (source && displayRect) {
-      const sr = displayBadgeBoxToSourceRect(displayRect, bx, by, width, height);
-      const colors = badgeColorsForSourceRect(source, sr.sx, sr.sy, sr.sw, sr.sh);
+    if (source && displayRect && checkRectSource) {
+      const colors = badgeColorsForDisplayBadge(source, displayRect, bx, by, width, height, checkRectSource);
       fillRgb = colors.fill;
       textRgb = colors.textRgb;
     }
 
     ctx.fillStyle = rgbToCss(fillRgb);
     ctx.fillRect(bx, by, width, height);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = textRgb[0] + textRgb[1] + textRgb[2] > 500 ? "rgba(0, 0, 0, 0.38)" : "rgba(255, 255, 255, 0.55)";
+    ctx.strokeRect(bx + 0.5, by + 0.5, width - 1, height - 1);
     ctx.fillStyle = rgbToCss(textRgb);
     ctx.font = "800 13px Avenir Next, Segoe UI, sans-serif";
     ctx.textAlign = "center";
@@ -596,21 +605,28 @@
       const isActive = check.id === state.activeCheckId;
       editorOverlayCtx.save();
       editorOverlayCtx.lineWidth = isActive ? 3 : 2;
-      editorOverlayCtx.strokeStyle = isActive ? "#ffe45c" : "#4fa3ff";
-      editorOverlayCtx.fillStyle = isActive ? "rgba(255, 228, 92, 0.07)" : "rgba(79, 163, 255, 0.05)";
+      if (isActive) {
+        editorOverlayCtx.strokeStyle = "#ffe45c";
+        editorOverlayCtx.fillStyle = "rgba(255, 228, 92, 0.07)";
+      } else {
+        const { strokeRgb } = markingColorsForCheckRect(source, check.rect);
+        editorOverlayCtx.strokeStyle = rgbToCss(strokeRgb);
+        editorOverlayCtx.fillStyle = rgbaCss(strokeRgb, 0.05);
+      }
       editorOverlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       editorOverlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-      drawNumberBadge(editorOverlayCtx, index + 1, rect, bounds, source, state.editorDisplayRect);
+      drawNumberBadge(editorOverlayCtx, index + 1, rect, bounds, source, state.editorDisplayRect, check.rect);
       editorOverlayCtx.restore();
     });
 
     if (state.draftRect) {
       const rect = sourceRectToDisplay(state.draftRect, state.editorDisplayRect);
+      const { strokeRgb } = markingColorsForCheckRect(source, state.draftRect);
       editorOverlayCtx.save();
       editorOverlayCtx.setLineDash([8, 6]);
       editorOverlayCtx.lineWidth = 2;
-      editorOverlayCtx.strokeStyle = "#ffe45c";
-      editorOverlayCtx.fillStyle = "rgba(255, 228, 92, 0.03)";
+      editorOverlayCtx.strokeStyle = rgbToCss(strokeRgb);
+      editorOverlayCtx.fillStyle = rgbaCss(strokeRgb, 0.03);
       editorOverlayCtx.fillRect(rect.x, rect.y, rect.width, rect.height);
       editorOverlayCtx.strokeRect(rect.x, rect.y, rect.width, rect.height);
       editorOverlayCtx.restore();
@@ -1051,6 +1067,17 @@
     return `rgb(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])})`;
   }
 
+  function rgbaCss(rgb, alpha) {
+    return `rgba(${Math.round(rgb[0])}, ${Math.round(rgb[1])}, ${Math.round(rgb[2])}, ${alpha})`;
+  }
+
+  /** Stroke + tint for a selection rect so the outline contrasts the image inside it. */
+  function markingColorsForCheckRect(source, rect) {
+    const interior = averageRgbUnderRect(source, rect.x, rect.y, rect.width, rect.height);
+    const strokeRgb = pickBadgeFillForBackground(interior);
+    return { strokeRgb };
+  }
+
   function averageRgbUnderRect(source, sx, sy, sw, sh) {
     const iw = source.width;
     const ih = source.height;
@@ -1091,26 +1118,117 @@
     return best;
   }
 
+  /** Prefer candidate whose worst contrast among samples is highest (stable on gradients). */
+  function pickBadgeFillForSamples(samples) {
+    if (!samples.length) return BADGE_FILL_CANDIDATES[0];
+    let best = BADGE_FILL_CANDIDATES[0];
+    let bestMin = -1;
+    for (const c of BADGE_FILL_CANDIDATES) {
+      const minC = Math.min(...samples.map((s) => contrastRatio(c, s)));
+      if (minC > bestMin) {
+        bestMin = minC;
+        best = c;
+      }
+    }
+    return best;
+  }
+
   function pickBadgeTextOnFill(fillRgb) {
     const onWhite = contrastRatio([255, 255, 255], fillRgb);
     const onBlack = contrastRatio([12, 12, 18], fillRgb);
     return onWhite >= onBlack ? [255, 255, 255] : [12, 12, 18];
   }
 
-  function badgeColorsForSourceRect(source, sx, sy, sw, sh) {
-    const bgSample = averageRgbUnderRect(source, sx, sy, sw, sh);
-    const fill = pickBadgeFillForBackground(bgSample);
-    const textRgb = pickBadgeTextOnFill(fill);
-    return { fill, textRgb };
+  function intersectRects(a, b) {
+    const x = Math.max(a.x, b.x);
+    const y = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
+    const width = Math.max(0, right - x);
+    const height = Math.max(0, bottom - y);
+    return { x, y, width, height };
   }
 
-  function displayBadgeBoxToSourceRect(displayRect, bx, by, bw, bh) {
+  function displayRegionToSourceRect(displayRect, dx, dy, dw, dh) {
     return {
-      sx: (bx - displayRect.x) / displayRect.scale,
-      sy: (by - displayRect.y) / displayRect.scale,
-      sw: bw / displayRect.scale,
-      sh: bh / displayRect.scale
+      sx: (dx - displayRect.x) / displayRect.scale,
+      sy: (dy - displayRect.y) / displayRect.scale,
+      sw: dw / displayRect.scale,
+      sh: dh / displayRect.scale
     };
+  }
+
+  /** Nine RGB samples across a source-space rectangle (single getImageData). */
+  function sampleRgbStopsUnderSourceRect(source, sx, sy, sw, sh) {
+    const iw = source.width;
+    const ih = source.height;
+    const x0 = clamp(Math.floor(sx), 0, Math.max(0, iw - 1));
+    const y0 = clamp(Math.floor(sy), 0, Math.max(0, ih - 1));
+    const x1 = clamp(Math.ceil(sx + sw), x0 + 1, iw);
+    const y1 = clamp(Math.ceil(sy + sh), y0 + 1, ih);
+    const w = x1 - x0;
+    const h = y1 - y0;
+    if (w < 1 || h < 1) return [];
+    const ctx = source.canvas.getContext("2d", { willReadFrequently: true });
+    const image = ctx.getImageData(x0, y0, w, h);
+    const data = image.data;
+    const uvs = [
+      [0.12, 0.12],
+      [0.5, 0.12],
+      [0.88, 0.12],
+      [0.12, 0.5],
+      [0.5, 0.5],
+      [0.88, 0.5],
+      [0.12, 0.88],
+      [0.5, 0.88],
+      [0.88, 0.88]
+    ];
+    const out = [];
+    for (const [u, v] of uvs) {
+      const lx = Math.min(w - 1, Math.max(0, Math.floor(u * Math.max(1, w - 0.001))));
+      const ly = Math.min(h - 1, Math.max(0, Math.floor(v * Math.max(1, h - 0.001))));
+      const i = (ly * w + lx) * 4;
+      out.push([data[i], data[i + 1], data[i + 2]]);
+    }
+    return out;
+  }
+
+  function badgeColorsForSourceBadgeBox(source, sx, sy, sw, sh) {
+    const samples = sampleRgbStopsUnderSourceRect(source, sx, sy, sw, sh);
+    if (samples.length === 0) {
+      const bg = averageRgbUnderRect(source, sx, sy, sw, sh);
+      const fill = pickBadgeFillForBackground(bg);
+      return { fill, textRgb: pickBadgeTextOnFill(fill) };
+    }
+    const fill = pickBadgeFillForSamples(samples);
+    return { fill, textRgb: pickBadgeTextOnFill(fill) };
+  }
+
+  /**
+   * Badge is drawn in display (CSS) pixels; only the part overlapping the fitted image should
+   * drive the colour. Otherwise the badge often sits in letterboxing and we wrongly sample
+   * the wrong strip of the bitmap — fall back to colours under the selection rect.
+   */
+  function badgeColorsForDisplayBadge(source, displayRect, bx, by, bw, bh, checkRectSource) {
+    const imageOnCanvas = {
+      x: displayRect.x,
+      y: displayRect.y,
+      width: displayRect.width,
+      height: displayRect.height
+    };
+    const badge = { x: bx, y: by, width: bw, height: bh };
+    const overlap = intersectRects(imageOnCanvas, badge);
+    if (overlap.width >= 2 && overlap.height >= 2) {
+      const sr = displayRegionToSourceRect(displayRect, overlap.x, overlap.y, overlap.width, overlap.height);
+      return badgeColorsForSourceBadgeBox(source, sr.sx, sr.sy, sr.sw, sr.sh);
+    }
+    return badgeColorsForSourceBadgeBox(
+      source,
+      checkRectSource.x,
+      checkRectSource.y,
+      checkRectSource.width,
+      checkRectSource.height
+    );
   }
 
   function rgbToHex(rgb) {
@@ -1152,8 +1270,9 @@
     source.checks.forEach((check, index) => {
       ctx.save();
       ctx.lineWidth = 4 * scale;
-      ctx.strokeStyle = "#1557a6";
-      ctx.fillStyle = "rgba(21, 87, 166, 0.14)";
+      const { strokeRgb } = markingColorsForCheckRect(source, check.rect);
+      ctx.strokeStyle = rgbToCss(strokeRgb);
+      ctx.fillStyle = rgbaCss(strokeRgb, 0.14);
       ctx.fillRect(check.rect.x, check.rect.y, check.rect.width, check.rect.height);
       ctx.strokeRect(check.rect.x, check.rect.y, check.rect.width, check.rect.height);
       drawReportBadge(ctx, source, index + 1, check.rect.x + 8 * scale, check.rect.y + 8 * scale, scale);
@@ -1166,9 +1285,12 @@
     const label = String(number);
     const width = Math.max(34 * scale, label.length * 14 * scale + 18 * scale);
     const height = 30 * scale;
-    const { fill, textRgb } = badgeColorsForSourceRect(source, x, y, width, height);
+    const { fill, textRgb } = badgeColorsForSourceBadgeBox(source, x, y, width, height);
     ctx.fillStyle = rgbToCss(fill);
     ctx.fillRect(x, y, width, height);
+    ctx.lineWidth = Math.max(1, scale);
+    ctx.strokeStyle = textRgb[0] + textRgb[1] + textRgb[2] > 500 ? "rgba(0, 0, 0, 0.38)" : "rgba(255, 255, 255, 0.55)";
+    ctx.strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
     ctx.fillStyle = rgbToCss(textRgb);
     ctx.font = `${18 * scale}px Avenir Next, Segoe UI, sans-serif`;
     ctx.textAlign = "center";
