@@ -1,9 +1,9 @@
 (function () {
   "use strict";
 
-  const pdfWorkerUrl = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const pdfWorkerUrl = "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
   /** Published site (GitHub Pages); update if the repo or username changes. */
-  const toolPagesUrl = "https://bdamokos.github.io/contrast-evidence-tool/";
+  const toolPagesUrl = "https://contrast.bdamokos.org/";
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;

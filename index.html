@@ -53,7 +53,6 @@
           </div>
           <div class="hint">
             <span>Use Open full screen for accurate marking</span>
-            <span>Drag still works here for quick checks</span>
             <span>Click a rectangle or result to select</span>
           </div>
         </section>
@@ -221,8 +220,11 @@
       </article>
     </template>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script type="module">
+      import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.6.205/legacy/build/pdf.min.mjs";
+      window.pdfjsLib = pdfjsLib;
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>
