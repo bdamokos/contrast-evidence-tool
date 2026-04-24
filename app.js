@@ -743,7 +743,7 @@
     els.pdfDialogMeta.textContent = `${file.name} has ${pdf.numPages} pages. Import one page or a range.`;
     els.pdfPageControls.innerHTML = `
       <label>Start page<input id="pdfStartPage" type="number" min="1" max="${pdf.numPages}" value="1"></label>
-      <label>End page<input id="pdfEndPage" type="number" min="1" max="${pdf.numPages}" value="1"></label>
+      <label>End page<input id="pdfEndPage" type="number" min="1" max="${pdf.numPages}" value="${pdf.numPages}"></label>
     `;
     els.pdfDialog.showModal();
     await new Promise((resolve) => {
