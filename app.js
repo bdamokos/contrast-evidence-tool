@@ -934,6 +934,10 @@
     return crop.toDataURL("image/png");
   }
 
+  function rgbEqual(a, b) {
+    return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+  }
+
   function sampleColors(source, rect) {
     const ctx = source.canvas.getContext("2d", { willReadFrequently: true });
     const image = ctx.getImageData(rect.x, rect.y, rect.width, rect.height);
@@ -985,10 +989,20 @@
       }))
       .sort((a, b) => b.contrast - a.contrast)[0];
 
-    return {
-      foreground: foregroundCandidate?.rgb || sorted[Math.min(1, sorted.length - 1)].rgb,
-      background
-    };
+    let foreground = foregroundCandidate?.rgb || sorted[Math.min(1, sorted.length - 1)].rgb;
+
+    if (rgbEqual(foreground, background)) {
+      const alternative = sorted
+        .filter((cluster) => !rgbEqual(cluster.rgb, background))
+        .map((cluster) => ({
+          rgb: cluster.rgb,
+          contrast: contrastRatio(cluster.rgb, background)
+        }))
+        .sort((a, b) => b.contrast - a.contrast)[0];
+      foreground = alternative?.rgb ?? (luminance(background) >= 0.5 ? [0, 0, 0] : [255, 255, 255]);
+    }
+
+    return { foreground, background };
   }
 
   function srgbToLinear(value) {
