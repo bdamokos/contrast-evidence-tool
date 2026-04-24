@@ -82,6 +82,10 @@
     snippetCanvas: document.querySelector("#snippetCanvas"),
     snippetPickFgButton: document.querySelector("#snippetPickFgButton"),
     snippetPickBgButton: document.querySelector("#snippetPickBgButton"),
+    snippetFgSwatch: document.querySelector("#snippetFgSwatch"),
+    snippetBgSwatch: document.querySelector("#snippetBgSwatch"),
+    snippetFgValue: document.querySelector("#snippetFgValue"),
+    snippetBgValue: document.querySelector("#snippetBgValue"),
     snippetZoomOutButton: document.querySelector("#snippetZoomOutButton"),
     snippetZoomInButton: document.querySelector("#snippetZoomInButton"),
     snippetZoomFitButton: document.querySelector("#snippetZoomFitButton"),
@@ -320,8 +324,33 @@
       if (!parsed) return;
       check[key] = parsed;
       check.ratio = contrastRatio(check.foreground, check.background);
-      render();
+      updateCheckColorControls(node, check);
+      updateCheckBadges(node, check);
+      updateResultSummary(node, check);
+      if (els.snippetDialog.open && state.snippetCheckId === check.id) renderSnippet();
+      drawOverlay();
+      if (els.editorDialog.open) drawEditorOverlay();
     });
+  }
+
+  function updateCheckColorControls(node, check) {
+    for (const kind of ["fg", "bg"]) {
+      const key = kind === "fg" ? "foreground" : "background";
+      const hex = rgbToHex(check[key]);
+      node.querySelector(kind === "fg" ? ".fgInput" : ".bgInput").value = hex;
+      node.querySelector(kind === "fg" ? ".fgColorInput" : ".bgColorInput").value = hex;
+      node.querySelector(kind === "fg" ? ".fgSwatch" : ".bgSwatch").style.background = hex;
+    }
+  }
+
+  function updateCheckBadges(node, check) {
+    setBadge(node.querySelector(".aaNormal"), BADGE_DETAILS.aaNormal, check.ratio >= BADGE_DETAILS.aaNormal.requirement);
+    setBadge(node.querySelector(".aaLarge"), BADGE_DETAILS.aaLarge, check.ratio >= BADGE_DETAILS.aaLarge.requirement);
+    setBadge(node.querySelector(".aaaNormal"), BADGE_DETAILS.aaaNormal, check.ratio >= BADGE_DETAILS.aaaNormal.requirement);
+  }
+
+  function updateResultSummary(node, check) {
+    node.querySelector(".ratio").textContent = `${formatRatio(check.ratio)}:1`;
   }
 
   function wireCropPicker(node, source, check, crop) {
@@ -633,6 +662,10 @@
 
     els.snippetTitle.textContent = `${check.label || "Snippet"} | ${check.rect.width} x ${check.rect.height}px`;
     els.snippetZoomLabel.textContent = `${Math.round(scale * 100)}%`;
+    els.snippetFgSwatch.style.background = rgbToHex(check.foreground);
+    els.snippetBgSwatch.style.background = rgbToHex(check.background);
+    els.snippetFgValue.textContent = rgbToHex(check.foreground);
+    els.snippetBgValue.textContent = rgbToHex(check.background);
     els.snippetPickFgButton.classList.toggle("isActive", (check.pickTarget || "foreground") === "foreground");
     els.snippetPickBgButton.classList.toggle("isActive", check.pickTarget === "background");
     els.snippetCanvasWrap.style.width = `${width}px`;

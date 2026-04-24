@@ -112,6 +112,22 @@
             <h2 id="snippetTitle">No snippet selected</h2>
           </div>
           <div class="editorControls">
+            <dl class="snippetColors" aria-label="Current selected colors">
+              <div>
+                <dt>Foreground</dt>
+                <dd>
+                  <span id="snippetFgSwatch" class="snippetSwatch"></span>
+                  <output id="snippetFgValue">#000000</output>
+                </dd>
+              </div>
+              <div>
+                <dt>Background</dt>
+                <dd>
+                  <span id="snippetBgSwatch" class="snippetSwatch"></span>
+                  <output id="snippetBgValue">#FFFFFF</output>
+                </dd>
+              </div>
+            </dl>
             <div class="pickMode snippetPickMode" role="group" aria-label="Pick color from full-screen snippet">
               <button id="snippetPickFgButton" class="pickButton isActive" type="button">Pick foreground</button>
               <button id="snippetPickBgButton" class="pickButton" type="button">Pick background</button>

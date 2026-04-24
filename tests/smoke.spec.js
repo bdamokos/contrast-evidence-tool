@@ -48,10 +48,28 @@ test("opens an extracted snippet full screen for color picking", async ({ page }
   const box = await canvas.boundingBox();
   expect(box).toBeTruthy();
   await page.mouse.click(box.x + 12, box.y + 12);
+  await expect(page.locator("#snippetBgValue")).toHaveText("#001C3E");
   await expect(page.locator(".bgInput")).toHaveValue("#001C3E");
 
   await page.locator("#closeSnippetButton").click();
   await expect(page.locator("#snippetDialog")).not.toBeVisible();
+});
+
+test("sidebar native color pickers update their corresponding hex inputs", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+
+  await setNativeColor(page, ".fgColorInput", "#112233");
+  await expect(page.locator(".fgInput")).toHaveValue("#112233");
+  await expect(page.locator(".bgInput")).not.toHaveValue("#112233");
+
+  await setNativeColor(page, ".bgColorInput", "#445566");
+  await expect(page.locator(".bgInput")).toHaveValue("#445566");
+  await expect(page.locator(".fgInput")).toHaveValue("#112233");
 });
 
 test("exports long check tables across PDF pages", async ({ page }) => {
@@ -97,6 +115,13 @@ async function drawCheck(page, rect = [190, 210, 640, 315]) {
   await page.mouse.down();
   await page.mouse.move(box.x + x2, box.y + y2, { steps: 10 });
   await page.mouse.up();
+}
+
+async function setNativeColor(page, selector, value) {
+  await page.locator(selector).evaluate((input, nextValue) => {
+    input.value = nextValue;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, value);
 }
 
 function countPdfPages(filePath) {
