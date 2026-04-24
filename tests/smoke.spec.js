@@ -32,6 +32,28 @@ test("uploads an image, marks checks, and exports a report", async ({ page }) =>
   expect(countPdfPages(exportPath)).toBe(2);
 });
 
+test("opens an extracted snippet full screen for color picking", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page, [75, 320, 715, 438]);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+
+  await page.locator(".openSnippetButton").click();
+  await expect(page.locator("#snippetDialog")).toBeVisible();
+
+  await page.locator("#snippetPickBgButton").click();
+  const canvas = page.locator("#snippetCanvas");
+  const box = await canvas.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.click(box.x + 12, box.y + 12);
+  await expect(page.locator(".bgInput")).toHaveValue("#001C3E");
+
+  await page.locator("#closeSnippetButton").click();
+  await expect(page.locator("#snippetDialog")).not.toBeVisible();
+});
+
 test("exports long check tables across PDF pages", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(pngPath);

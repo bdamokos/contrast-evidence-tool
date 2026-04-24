@@ -388,6 +388,17 @@ dt {
   image-rendering: auto;
 }
 
+.openSnippetButton {
+  border: 1px solid var(--line);
+  background: #fffdf8;
+  color: var(--blue-dark);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
 .pickMode {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -562,6 +573,13 @@ dd {
   font-weight: 900;
 }
 
+#snippetZoomLabel {
+  min-width: 58px;
+  text-align: center;
+  color: #fff;
+  font-weight: 900;
+}
+
 .editorStage {
   flex: 1 1 auto;
   min-height: 0;
@@ -595,6 +613,57 @@ dd {
 
 #editorOverlayCanvas {
   cursor: crosshair;
+}
+
+.snippetDialog {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: #141a22;
+  color: #fff;
+}
+
+.snippetDialog::backdrop {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.snippetShell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.snippetPickMode {
+  min-width: min(320px, 100%);
+}
+
+.snippetPickMode .pickButton {
+  background: #172130;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.snippetPickMode .pickButton.isActive {
+  background: var(--yellow);
+  color: #1d2430;
+  border-color: var(--yellow);
+}
+
+.snippetCanvasWrap {
+  position: relative;
+  background: #ece8df;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+
+#snippetCanvas {
+  display: block;
+  cursor: crosshair;
+  image-rendering: pixelated;
 }
 
 .pdfDialog form {

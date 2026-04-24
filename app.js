@@ -17,6 +17,10 @@
     editorScale: 1,
     editorFitScale: 1,
     editorDisplayRect: null,
+    snippetScale: 1,
+    snippetFitScale: 1,
+    snippetSourceId: null,
+    snippetCheckId: null,
     suppressOpenClick: false,
     pendingPdf: null
   };
@@ -70,13 +74,26 @@
     zoomInButton: document.querySelector("#zoomInButton"),
     zoomFitButton: document.querySelector("#zoomFitButton"),
     zoomLabel: document.querySelector("#zoomLabel"),
-    closeEditorButton: document.querySelector("#closeEditorButton")
+    closeEditorButton: document.querySelector("#closeEditorButton"),
+    snippetDialog: document.querySelector("#snippetDialog"),
+    snippetTitle: document.querySelector("#snippetTitle"),
+    snippetStage: document.querySelector("#snippetStage"),
+    snippetCanvasWrap: document.querySelector("#snippetCanvasWrap"),
+    snippetCanvas: document.querySelector("#snippetCanvas"),
+    snippetPickFgButton: document.querySelector("#snippetPickFgButton"),
+    snippetPickBgButton: document.querySelector("#snippetPickBgButton"),
+    snippetZoomOutButton: document.querySelector("#snippetZoomOutButton"),
+    snippetZoomInButton: document.querySelector("#snippetZoomInButton"),
+    snippetZoomFitButton: document.querySelector("#snippetZoomFitButton"),
+    snippetZoomLabel: document.querySelector("#snippetZoomLabel"),
+    closeSnippetButton: document.querySelector("#closeSnippetButton")
   };
 
   const imageCtx = els.imageCanvas.getContext("2d", { willReadFrequently: true });
   const overlayCtx = els.overlayCanvas.getContext("2d");
   const editorImageCtx = els.editorImageCanvas.getContext("2d", { willReadFrequently: true });
   const editorOverlayCtx = els.editorOverlayCanvas.getContext("2d");
+  const snippetCtx = els.snippetCanvas.getContext("2d", { willReadFrequently: true });
 
   function uid(prefix) {
     return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now()}`;
@@ -256,6 +273,9 @@
       crop.src = check.cropDataUrl;
       crop.alt = `${check.label} crop`;
       wireCropPicker(node, source, check, crop);
+      node.querySelector(".openSnippetButton").addEventListener("click", () => {
+        openSnippetPicker(source, check);
+      });
 
       wireHexInput(node, check, "fg");
       wireHexInput(node, check, "bg");
@@ -559,6 +579,117 @@
     const current = state.editorScale || state.editorFitScale || 1;
     state.editorScale = clamp(current * multiplier, Math.max(0.1, state.editorFitScale * 0.5), 4);
     renderEditor();
+  }
+
+  function snippetSource() {
+    return state.sources.find((source) => source.id === state.snippetSourceId) || null;
+  }
+
+  function snippetCheck(source = snippetSource()) {
+    if (!source) return null;
+    return source.checks.find((check) => check.id === state.snippetCheckId) || null;
+  }
+
+  function openSnippetPicker(source, check) {
+    state.snippetSourceId = source.id;
+    state.snippetCheckId = check.id;
+    state.activeSourceId = source.id;
+    state.activeCheckId = check.id;
+    state.snippetScale = 0;
+    els.snippetDialog.showModal();
+    requestAnimationFrame(() => {
+      setSnippetFitScale();
+      render();
+      renderSnippet();
+    });
+  }
+
+  function closeSnippetPicker() {
+    state.snippetSourceId = null;
+    state.snippetCheckId = null;
+    els.snippetDialog.close();
+  }
+
+  function setSnippetFitScale() {
+    const check = snippetCheck();
+    if (!check) return;
+    const stage = els.snippetStage.getBoundingClientRect();
+    const availableWidth = Math.max(320, stage.width - 48);
+    const availableHeight = Math.max(240, stage.height - 48);
+    const fitScale = Math.min(availableWidth / check.rect.width, availableHeight / check.rect.height);
+    state.snippetFitScale = clamp(fitScale, 0.2, 12);
+    state.snippetScale = state.snippetFitScale;
+  }
+
+  function renderSnippet() {
+    const source = snippetSource();
+    const check = snippetCheck(source);
+    if (!source || !check || !els.snippetDialog.open) return;
+
+    const scale = state.snippetScale || state.snippetFitScale || 1;
+    const width = Math.max(1, Math.round(check.rect.width * scale));
+    const height = Math.max(1, Math.round(check.rect.height * scale));
+    const dpr = window.devicePixelRatio || 1;
+
+    els.snippetTitle.textContent = `${check.label || "Snippet"} | ${check.rect.width} x ${check.rect.height}px`;
+    els.snippetZoomLabel.textContent = `${Math.round(scale * 100)}%`;
+    els.snippetPickFgButton.classList.toggle("isActive", (check.pickTarget || "foreground") === "foreground");
+    els.snippetPickBgButton.classList.toggle("isActive", check.pickTarget === "background");
+    els.snippetCanvasWrap.style.width = `${width}px`;
+    els.snippetCanvasWrap.style.height = `${height}px`;
+    els.snippetCanvas.width = Math.round(width * dpr);
+    els.snippetCanvas.height = Math.round(height * dpr);
+    els.snippetCanvas.style.width = `${width}px`;
+    els.snippetCanvas.style.height = `${height}px`;
+
+    snippetCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    snippetCtx.clearRect(0, 0, width, height);
+    snippetCtx.imageSmoothingEnabled = false;
+    snippetCtx.drawImage(
+      source.canvas,
+      check.rect.x,
+      check.rect.y,
+      check.rect.width,
+      check.rect.height,
+      0,
+      0,
+      width,
+      height
+    );
+  }
+
+  function zoomSnippet(multiplier) {
+    const check = snippetCheck();
+    if (!check) return;
+    const current = state.snippetScale || state.snippetFitScale || 1;
+    const maxScale = Math.max(16, state.snippetFitScale);
+    state.snippetScale = clamp(current * multiplier, Math.max(0.1, state.snippetFitScale * 0.5), maxScale);
+    renderSnippet();
+  }
+
+  function setSnippetPickTarget(target) {
+    const check = snippetCheck();
+    if (!check) return;
+    check.pickTarget = target;
+    render();
+    renderSnippet();
+  }
+
+  function pickSnippetPixel(event) {
+    const source = snippetSource();
+    const check = snippetCheck(source);
+    if (!source || !check) return;
+    const rect = els.snippetCanvas.getBoundingClientRect();
+    const scale = state.snippetScale || state.snippetFitScale || 1;
+    const localX = clamp(event.clientX - rect.left, 0, rect.width - 1);
+    const localY = clamp(event.clientY - rect.top, 0, rect.height - 1);
+    const x = clamp(check.rect.x + Math.floor(localX / scale), 0, source.width - 1);
+    const y = clamp(check.rect.y + Math.floor(localY / scale), 0, source.height - 1);
+    const pixel = source.canvas.getContext("2d", { willReadFrequently: true }).getImageData(x, y, 1, 1).data;
+    check[check.pickTarget || "foreground"] = [pixel[0], pixel[1], pixel[2]];
+    check.ratio = contrastRatio(check.foreground, check.background);
+    render();
+    renderSnippet();
   }
 
   async function handleFiles(files) {
@@ -885,10 +1016,10 @@
     doc.setFontSize(8);
     doc.text("#", page.margin + 2, y + 5.5);
     doc.text("Crop", page.margin + 12, y + 5.5);
-    doc.text("Label", page.margin + 48, y + 5.5);
-    doc.text("Colors", page.margin + 100, y + 5.5);
-    doc.text("Ratio", page.margin + 140, y + 5.5);
-    doc.text("Result", page.margin + 160, y + 5.5);
+    doc.text("Label", page.margin + 45, y + 5.5);
+    doc.text("Colors", page.margin + 82, y + 5.5);
+    doc.text("Ratio", page.margin + 122, y + 5.5);
+    doc.text("Result", page.margin + 142, y + 5.5);
     doc.setTextColor(0, 0, 0);
     return y + 9;
   }
@@ -901,16 +1032,31 @@
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
     doc.text(String(number), page.margin + 2, y + 7);
-    doc.addImage(check.cropDataUrl, "PNG", page.margin + 12, y + 3, 30, 18);
+    drawCropPreview(doc, check, page.margin + 12, y + 3, 26, 18);
     doc.setFont("helvetica", "normal");
-    doc.text(check.label || `Check ${number}`, page.margin + 48, y + 7, { maxWidth: 48 });
-    drawColorValue(doc, `FG ${rgbToHex(check.foreground)}`, check.foreground, page.margin + 100, y + 7);
-    drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, page.margin + 100, y + 13);
+    doc.text(check.label || `Check ${number}`, page.margin + 45, y + 7, { maxWidth: 32 });
+    drawColorValue(doc, `FG ${rgbToHex(check.foreground)}`, check.foreground, page.margin + 82, y + 7);
+    drawColorValue(doc, `BG ${rgbToHex(check.background)}`, check.background, page.margin + 82, y + 13);
     doc.setFont("helvetica", "bold");
-    doc.text(`${formatRatio(check.ratio)}:1`, page.margin + 140, y + 7);
-    drawResultValue(doc, check, page.margin + 160, y + 7);
+    doc.text(`${formatRatio(check.ratio)}:1`, page.margin + 122, y + 7);
+    drawResultValue(doc, check, page.margin + 142, y + 7);
     doc.setTextColor(0, 0, 0);
     return y + CHECK_ROW_HEIGHT;
+  }
+
+  function drawCropPreview(doc, check, x, y, maxWidth, maxHeight) {
+    const { width, height } = check.rect;
+    const scale = Math.min(maxWidth / width, maxHeight / height);
+    const previewWidth = width * scale;
+    const previewHeight = height * scale;
+    doc.addImage(
+      check.cropDataUrl,
+      "PNG",
+      x + (maxWidth - previewWidth) / 2,
+      y + (maxHeight - previewHeight) / 2,
+      previewWidth,
+      previewHeight
+    );
   }
 
   function drawColorValue(doc, label, color, x, y) {
@@ -930,12 +1076,13 @@
     const aaNormalPass = check.ratio >= 4.5;
     const resultColor = aaNormalPass ? [23, 114, 69] : [180, 35, 24];
     doc.setTextColor(...resultColor);
-    doc.text(`AA normal: ${aaNormalPass ? "pass" : "fail"}`, x, y, { maxWidth: 34 });
+    doc.setFontSize(8);
+    doc.text(`AA normal ${aaNormalPass ? "pass" : "fail"}`, x, y, { maxWidth: 50 });
     doc.setTextColor(0, 0, 0);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.text(`AA large: ${check.ratio >= 3 ? "pass" : "fail"}`, x, y + 6, { maxWidth: 34 });
-    doc.text(`AAA: ${check.ratio >= 7 ? "pass" : "fail"}`, x, y + 11, { maxWidth: 34 });
+    doc.setFontSize(7);
+    doc.text(`AA large ${check.ratio >= 3 ? "pass" : "fail"}`, x, y + 6, { maxWidth: 50 });
+    doc.text(`AAA ${check.ratio >= 7 ? "pass" : "fail"}`, x, y + 11, { maxWidth: 50 });
   }
 
   function dateStamp() {
@@ -997,6 +1144,22 @@
     render();
   });
 
+  els.snippetPickFgButton.addEventListener("click", () => setSnippetPickTarget("foreground"));
+  els.snippetPickBgButton.addEventListener("click", () => setSnippetPickTarget("background"));
+  els.snippetZoomOutButton.addEventListener("click", () => zoomSnippet(0.8));
+  els.snippetZoomInButton.addEventListener("click", () => zoomSnippet(1.25));
+  els.snippetZoomFitButton.addEventListener("click", () => {
+    setSnippetFitScale();
+    renderSnippet();
+  });
+  els.snippetCanvas.addEventListener("click", pickSnippetPixel);
+  els.closeSnippetButton.addEventListener("click", closeSnippetPicker);
+  els.snippetDialog.addEventListener("close", () => {
+    state.snippetSourceId = null;
+    state.snippetCheckId = null;
+    render();
+  });
+
   els.importPdfPagesButton.addEventListener("click", importPendingPdfPages);
   els.exportButton.addEventListener("click", exportReport);
   els.resetButton.addEventListener("click", () => {
@@ -1020,6 +1183,10 @@
     if (els.editorDialog.open) {
       setEditorFitScale();
       renderEditor();
+    }
+    if (els.snippetDialog.open) {
+      setSnippetFitScale();
+      renderSnippet();
     }
   });
   new ResizeObserver(render).observe(els.dropZone);

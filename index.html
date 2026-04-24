@@ -104,6 +104,33 @@
       </div>
     </dialog>
 
+    <dialog id="snippetDialog" class="snippetDialog">
+      <div class="snippetShell">
+        <header class="editorTopbar">
+          <div>
+            <p class="eyebrow">Full-screen colour picker</p>
+            <h2 id="snippetTitle">No snippet selected</h2>
+          </div>
+          <div class="editorControls">
+            <div class="pickMode snippetPickMode" role="group" aria-label="Pick color from full-screen snippet">
+              <button id="snippetPickFgButton" class="pickButton isActive" type="button">Pick foreground</button>
+              <button id="snippetPickBgButton" class="pickButton" type="button">Pick background</button>
+            </div>
+            <button id="snippetZoomOutButton" class="button ghost" type="button">-</button>
+            <output id="snippetZoomLabel">Fit</output>
+            <button id="snippetZoomInButton" class="button ghost" type="button">+</button>
+            <button id="snippetZoomFitButton" class="button ghost" type="button">Fit</button>
+            <button id="closeSnippetButton" class="button primary" type="button">Done</button>
+          </div>
+        </header>
+        <div id="snippetStage" class="editorStage">
+          <div id="snippetCanvasWrap" class="snippetCanvasWrap">
+            <canvas id="snippetCanvas" aria-label="Full-screen snippet colour picker"></canvas>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
     <template id="sourceTemplate">
       <article class="sourceCard">
         <button class="sourceButton" type="button">
@@ -129,6 +156,7 @@
             <button class="pickButton pickFg isActive" type="button">Pick foreground</button>
             <button class="pickButton pickBg" type="button">Pick background</button>
           </div>
+          <button class="openSnippetButton" type="button">Open snippet full screen</button>
           <img class="cropPreview" alt="">
         </div>
         <dl class="metrics">
