@@ -277,6 +277,10 @@ canvas {
   font-size: 28px;
 }
 
+.emptyState > span {
+  color: #556070;
+}
+
 .dropZone.hasImage .emptyState {
   display: none;
 }
