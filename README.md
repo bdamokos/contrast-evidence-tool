@@ -40,10 +40,11 @@ npm test
 
 ## GitHub Pages
 
-1. Push this repository to GitHub.
-2. In the repository settings, open **Pages**.
-3. Set the source to the default branch and repository root.
-4. Open the published Pages URL.
+This repository is configured to deploy to GitHub Pages with GitHub Actions.
+
+1. Push the `main` branch to GitHub.
+2. In the repository settings, open **Pages** and set **Source** to **GitHub Actions**.
+3. Every push to `main` will publish the site automatically.
 
 ## Notes on accuracy
 
