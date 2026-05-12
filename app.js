@@ -389,6 +389,24 @@
     if (els.editorDialog.open) renderEditor();
   }
 
+  function removeSource(sourceId) {
+    const removedSourceWasActive = state.activeSourceId === sourceId;
+    state.sources = state.sources.filter((source) => source.id !== sourceId);
+    if (removedSourceWasActive) {
+      state.activeSourceId = state.sources[0]?.id || null;
+      state.activeCheckId = activeSource()?.checks[0]?.id || null;
+    } else if (!activeSource()) {
+      state.activeSourceId = state.sources[0]?.id || null;
+      state.activeCheckId = activeSource()?.checks[0]?.id || null;
+    }
+
+    clearInteractionState();
+    state.editorDisplayRect = null;
+    els.overlayDeleteLayer?.replaceChildren();
+    els.editorDeleteLayer?.replaceChildren();
+    render();
+  }
+
   /**
    * Same badge anchor everywhere (main overlay, editor, PDF export): try above → right → below →
    * left of the selection rect, then clamp inside bounds. `rect` and `bounds` share one space.
@@ -2829,10 +2847,7 @@
   els.deleteSourceButton.addEventListener("click", () => {
     const current = activeSource();
     if (!current) return;
-    state.sources = state.sources.filter((source) => source.id !== current.id);
-    state.activeSourceId = state.sources[0]?.id || null;
-    state.activeCheckId = activeSource()?.checks[0]?.id || null;
-    render();
+    removeSource(current.id);
   });
   window.addEventListener("paste", onPaste);
 
