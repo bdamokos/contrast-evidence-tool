@@ -85,6 +85,24 @@
     state.resizeDrag = null;
   }
 
+  function syncOpenDialogsWithState() {
+    if (els.editorDialog.open && !activeSource()) {
+      els.editorDialog.close();
+    }
+
+    if (state.snippetSourceId !== null || state.snippetCheckId !== null) {
+      const sSource = snippetSource();
+      const sCheck = snippetCheck(sSource);
+      if (!sSource || !sCheck) {
+        state.snippetSourceId = null;
+        state.snippetCheckId = null;
+        if (els.snippetDialog.open) {
+          els.snippetDialog.close();
+        }
+      }
+    }
+  }
+
   const BADGE_DETAILS = {
     aaNormal: {
       label: "AA normal",
@@ -208,6 +226,7 @@
   }
 
   function render() {
+    syncOpenDialogsWithState();
     setupCanvasSize();
     renderSources();
     renderActiveSource();
