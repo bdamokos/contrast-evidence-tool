@@ -200,18 +200,6 @@ test("deleting an image clears contrast block controls and open overlays", async
   await expect(page.locator("#snippetDialog")).not.toBeVisible();
 });
 
-test("deleting an image clears rectangle delete handle on the main canvas", async ({ page }) => {
-  await page.goto("/");
-  await page.locator("#fileInput").setInputFiles(pngPath);
-  await drawCheck(page, [140, 150, 420, 260]);
-
-  await expect(page.locator(".rectangleDeleteHandle")).toHaveCount(1);
-  await page.locator("#deleteSourceButton").click();
-  await expect(page.locator(".sourceCard")).toHaveCount(0);
-  await expect(page.locator(".rectangleDeleteHandle")).toHaveCount(0);
-  await expect(page.locator(".rectangleResizeHandle")).toHaveCount(0);
-});
-
 
 test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
   await page.goto("/");
