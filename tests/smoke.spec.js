@@ -180,6 +180,26 @@ test("reset removes rectangle overlay controls", async ({ page }) => {
   await expect(page.locator(".sourceCard")).toHaveCount(0);
 });
 
+test("deleting an image clears contrast block controls and open overlays", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#fileInput").setInputFiles(pngPath);
+  await expect(page.locator(".sourceCard")).toHaveCount(1);
+
+  await drawCheck(page);
+  await expect(page.locator(".sampleCard")).toHaveCount(1);
+  await expect(page.locator(".rectangleDeleteHandle")).toHaveCount(1);
+
+  await page.locator(".openSnippetButton").click();
+  await expect(page.locator("#snippetDialog")).toBeVisible();
+
+  await page.locator("#deleteSourceButton").click();
+  await expect(page.locator(".sourceCard")).toHaveCount(0);
+  await expect(page.locator(".sampleCard")).toHaveCount(0);
+  await expect(page.locator(".rectangleDeleteHandle")).toHaveCount(0);
+  await expect(page.locator(".rectangleResizeHandle")).toHaveCount(0);
+  await expect(page.locator("#snippetDialog")).not.toBeVisible();
+});
+
 test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(solidPngPath);
