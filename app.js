@@ -91,13 +91,15 @@
       els.editorDialog.close();
     }
 
-    const snippetSourceValue = snippetSource();
-    const snippetCheckValue = snippetCheck(snippetSourceValue);
-    if (!snippetSourceValue || !snippetCheckValue) {
-      state.snippetSourceId = null;
-      state.snippetCheckId = null;
-      if (els.snippetDialog.open) {
-        els.snippetDialog.close();
+    if (state.snippetSourceId || state.snippetCheckId) {
+      const snippetSourceValue = snippetSource();
+      const snippetCheckValue = snippetCheck(snippetSourceValue);
+      if (!snippetSourceValue || !snippetCheckValue) {
+        state.snippetSourceId = null;
+        state.snippetCheckId = null;
+        if (els.snippetDialog.open) {
+          els.snippetDialog.close();
+        }
       }
     }
   }
@@ -405,6 +407,15 @@
     els.overlayDeleteLayer?.replaceChildren();
     els.editorDeleteLayer?.replaceChildren();
     render();
+    if (els.editorDialog.open) {
+      const source = activeSource();
+      if (!source) {
+        els.editorDialog.close();
+      } else {
+        setEditorFitScale();
+        renderEditor();
+      }
+    }
   }
 
   /**
