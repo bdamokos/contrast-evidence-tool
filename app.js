@@ -86,18 +86,19 @@
   }
 
   function syncOpenDialogsWithState() {
-    const source = activeSource();
-    if (!source && els.editorDialog.open) {
+    if (els.editorDialog.open && !activeSource()) {
       els.editorDialog.close();
     }
 
-    const snippetSourceValue = snippetSource();
-    const snippetCheckValue = snippetCheck(snippetSourceValue);
-    if (!snippetSourceValue || !snippetCheckValue) {
-      state.snippetSourceId = null;
-      state.snippetCheckId = null;
-      if (els.snippetDialog.open) {
-        els.snippetDialog.close();
+    if (state.snippetSourceId !== null || state.snippetCheckId !== null) {
+      const sSource = snippetSource();
+      const sCheck = snippetCheck(sSource);
+      if (!sSource || !sCheck) {
+        state.snippetSourceId = null;
+        state.snippetCheckId = null;
+        if (els.snippetDialog.open) {
+          els.snippetDialog.close();
+        }
       }
     }
   }
