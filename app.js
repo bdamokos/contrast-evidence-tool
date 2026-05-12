@@ -86,15 +86,14 @@
   }
 
   function syncOpenDialogsWithState() {
-    const source = activeSource();
-    if (!source && els.editorDialog.open) {
+    if (els.editorDialog.open && !activeSource()) {
       els.editorDialog.close();
     }
 
-    if (state.snippetSourceId || state.snippetCheckId) {
-      const snippetSourceValue = snippetSource();
-      const snippetCheckValue = snippetCheck(snippetSourceValue);
-      if (!snippetSourceValue || !snippetCheckValue) {
+    if (state.snippetSourceId !== null || state.snippetCheckId !== null) {
+      const sSource = snippetSource();
+      const sCheck = snippetCheck(sSource);
+      if (!sSource || !sCheck) {
         state.snippetSourceId = null;
         state.snippetCheckId = null;
         if (els.snippetDialog.open) {

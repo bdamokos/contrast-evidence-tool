@@ -212,6 +212,7 @@ test("deleting an image clears rectangle delete handle on the main canvas", asyn
   await expect(page.locator(".rectangleResizeHandle")).toHaveCount(0);
 });
 
+
 test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(solidPngPath);
