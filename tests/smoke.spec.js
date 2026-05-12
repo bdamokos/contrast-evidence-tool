@@ -200,6 +200,7 @@ test("deleting an image clears contrast block controls and open overlays", async
   await expect(page.locator("#snippetDialog")).not.toBeVisible();
 });
 
+
 test("does not invent black or white when a rectangle has one detected color", async ({ page }) => {
   await page.goto("/");
   await page.locator("#fileInput").setInputFiles(solidPngPath);

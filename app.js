@@ -245,6 +245,7 @@
       els.activeSourceTitle.textContent = "No source selected";
       els.activeSourceMeta.textContent = "Upload an image or PDF page to begin.";
       state.displayRect = null;
+      renderDeleteHandles("main");
       return;
     }
 
@@ -387,6 +388,33 @@
     state.draftRect = null;
     render();
     if (els.editorDialog.open) renderEditor();
+  }
+
+  function removeSource(sourceId) {
+    const removedSourceWasActive = state.activeSourceId === sourceId;
+    state.sources = state.sources.filter((source) => source.id !== sourceId);
+    if (removedSourceWasActive) {
+      state.activeSourceId = state.sources[0]?.id || null;
+      state.activeCheckId = activeSource()?.checks[0]?.id || null;
+    } else if (!activeSource()) {
+      state.activeSourceId = state.sources[0]?.id || null;
+      state.activeCheckId = activeSource()?.checks[0]?.id || null;
+    }
+
+    clearInteractionState();
+    state.editorDisplayRect = null;
+    els.overlayDeleteLayer?.replaceChildren();
+    els.editorDeleteLayer?.replaceChildren();
+    render();
+    if (els.editorDialog.open) {
+      const source = activeSource();
+      if (!source) {
+        els.editorDialog.close();
+      } else {
+        setEditorFitScale();
+        renderEditor();
+      }
+    }
   }
 
   /**
@@ -2829,10 +2857,7 @@
   els.deleteSourceButton.addEventListener("click", () => {
     const current = activeSource();
     if (!current) return;
-    state.sources = state.sources.filter((source) => source.id !== current.id);
-    state.activeSourceId = state.sources[0]?.id || null;
-    state.activeCheckId = activeSource()?.checks[0]?.id || null;
-    render();
+    removeSource(current.id);
   });
   window.addEventListener("paste", onPaste);
 
